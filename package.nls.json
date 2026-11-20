@@ -1,0 +1,13 @@
+{
+  "extension.description": "Browse your Penpot teams, projects, files, pages and boards and preview designs right inside VS Code. Unofficial; not affiliated with Penpot.",
+  "view.container": "Penpot",
+  "view.tree": "Explorer",
+  "view.welcome": "Connect to Penpot with a personal access token.\nWorks with Penpot Cloud and self-hosted instances.\n[Connect to Penpot](command:penpotExplorer.connect)\nCreate a token in Penpot → Your account → Integrations → Access tokens.",
+  "command.connect": "Connect to Penpot…",
+  "command.disconnect": "Disconnect from Penpot",
+  "command.refresh": "Refresh",
+  "command.openInBrowser": "Open in Penpot",
+  "command.preview": "Preview",
+  "config.serverUrl": "Address of your Penpot instance, without a trailing slash. Use `https://design.penpot.app` for Penpot Cloud or the URL of your self-hosted Penpot (for example `http://localhost:9001`).",
+  "config.loadWebFonts": "Load Inter and JetBrains Mono from Google Fonts in the preview, so text looks closer to Penpot. Turn off to use only fonts installed on your machine (no request to Google)."
+}

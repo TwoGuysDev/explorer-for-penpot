@@ -1,0 +1,175 @@
+{
+  "name": "explorer-for-penpot",
+  "displayName": "Explorer for Penpot",
+  "description": "%extension.description%",
+  "version": "0.2.0",
+  "publisher": "twoguysdev",
+  "author": "TwoGuysDev",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1E1F23",
+    "theme": "dark"
+  },
+  "homepage": "https://github.com/TwoGuysDev/explorer-for-penpot#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TwoGuysDev/explorer-for-penpot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TwoGuysDev/explorer-for-penpot/issues"
+  },
+  "keywords": [
+    "penpot",
+    "design",
+    "ui",
+    "preview",
+    "design handoff"
+  ],
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./dist/extension.js",
+  "l10n": "./l10n",
+  "activationEvents": [],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": true
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "penpotExplorer",
+          "title": "%view.container%",
+          "icon": "media/penpot.svg"
+        }
+      ]
+    },
+    "views": {
+      "penpotExplorer": [
+        {
+          "id": "penpotExplorer.tree",
+          "name": "%view.tree%"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "penpotExplorer.tree",
+        "contents": "%view.welcome%",
+        "when": "!penpotExplorer.hasToken"
+      }
+    ],
+    "commands": [
+      {
+        "command": "penpotExplorer.connect",
+        "title": "%command.connect%",
+        "category": "Penpot",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "penpotExplorer.disconnect",
+        "title": "%command.disconnect%",
+        "category": "Penpot"
+      },
+      {
+        "command": "penpotExplorer.refresh",
+        "title": "%command.refresh%",
+        "category": "Penpot",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "penpotExplorer.openInBrowser",
+        "title": "%command.openInBrowser%",
+        "category": "Penpot",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "penpotExplorer.preview",
+        "title": "%command.preview%",
+        "category": "Penpot",
+        "icon": "$(eye)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "penpotExplorer.refresh",
+          "when": "view == penpotExplorer.tree && penpotExplorer.hasToken",
+          "group": "navigation"
+        },
+        {
+          "command": "penpotExplorer.connect",
+          "when": "view == penpotExplorer.tree",
+          "group": "navigation"
+        },
+        {
+          "command": "penpotExplorer.disconnect",
+          "when": "view == penpotExplorer.tree && penpotExplorer.hasToken"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "penpotExplorer.preview",
+          "when": "view == penpotExplorer.tree && viewItem =~ /^(frame|page)$/",
+          "group": "inline"
+        },
+        {
+          "command": "penpotExplorer.openInBrowser",
+          "when": "view == penpotExplorer.tree && viewItem =~ /^(file|page|frame)$/",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "penpotExplorer.preview",
+          "when": "false"
+        },
+        {
+          "command": "penpotExplorer.openInBrowser",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Explorer for Penpot",
+      "properties": {
+        "penpotExplorer.serverUrl": {
+          "type": "string",
+          "default": "https://design.penpot.app",
+          "markdownDescription": "%config.serverUrl%"
+        },
+        "penpotExplorer.preview.loadWebFonts": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.loadWebFonts%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run bundle",
+    "bundle": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node18 --minify --sourcemap",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "tsc -p ./ && node --test \"out/test/**/*.test.js\"",
+    "package": "vsce package",
+    "publish:vsce": "vsce publish",
+    "publish:ovsx": "ovsx publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.1.1",
+    "esbuild": "0.28.2",
+    "ovsx": "1.3.0",
+    "typescript": "^5.9.0"
+  }
+}

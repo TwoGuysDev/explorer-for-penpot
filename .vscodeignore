@@ -1,0 +1,11 @@
+**
+!dist/extension.js
+!media/icon.png
+!media/penpot.svg
+!l10n/**
+!package.nls*.json
+!package.json
+!README.md
+!README.pt-BR.md
+!CHANGELOG.md
+!LICENSE

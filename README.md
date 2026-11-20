@@ -1,0 +1,74 @@
+# Explorer for Penpot
+
+Browse your [Penpot](https://penpot.app) designs without leaving VS Code: teams, projects, files, pages and boards in the sidebar, and a preview of any board in an editor tab.
+
+> **Unofficial.** Explorer for Penpot is a community extension made by TwoGuysDev. It is not made, endorsed or supported by Penpot or Kaleidos.
+
+![Preview of a Penpot board inside VS Code](docs/preview-render.png)
+
+## Features
+
+- **Sidebar explorer**: teams → projects → files → pages → boards, with each board's size.
+- **Board preview**: click a board to see it in a tab, drawn as SVG from Penpot's data (layouts, text, images, gradients, strokes, shadows and blur). Switch between *fit to window* and *100%*.
+- **Compare with Penpot's thumbnail**: when the Penpot editor has already generated a thumbnail for the board, show it next to the preview.
+- **Open in Penpot**: jump from a file, page or board straight to the Penpot editor in your browser.
+- **Penpot Cloud and self-hosted**: works with `design.penpot.app` and with your own instance (including `localhost`).
+- **English and Brazilian Portuguese.**
+
+## Getting started
+
+1. Install the extension and click the **Penpot** icon in the activity bar.
+2. Click **Connect to Penpot** and choose **Penpot Cloud** or enter the address of your self-hosted Penpot.
+3. Create a personal access token in Penpot: **Your account → Integrations → Access tokens → Generate new token**, then paste it.
+
+The token is checked against your Penpot before it is saved.
+
+### Self-hosted Penpot
+
+Access tokens must be enabled on your instance. Add `enable-access-tokens` to `PENPOT_FLAGS` (for both frontend and backend) and restart Penpot. With the official Docker setup, that is the `x-flags` line of `docker-compose.yaml`.
+
+## Privacy and security
+
+- Your access token is stored in VS Code's **secret storage** (your operating system's credential store), never in settings or files.
+- The extension only talks to the Penpot server you configure, using Penpot's public RPC API with your token. It is **read-only**: it never changes your designs.
+- **No telemetry.** The extension collects nothing.
+- By default the preview loads the Inter and JetBrains Mono fonts from Google Fonts so text looks closer to Penpot. Turn off `penpotExplorer.preview.loadWebFonts` to avoid that request.
+- The preview runs in a locked-down webview (no network access except those fonts; scripts and external links inside imported SVGs are dropped).
+
+## Settings
+
+| Setting | Default | Description |
+|---|---|---|
+| `penpotExplorer.serverUrl` | `https://design.penpot.app` | Address of your Penpot instance. Set by the *Connect* command. |
+| `penpotExplorer.preview.loadWebFonts` | `true` | Load Inter and JetBrains Mono from Google Fonts in the preview. |
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| **Penpot: Connect to Penpot…** | Choose the server and save an access token. |
+| **Penpot: Disconnect from Penpot** | Remove the saved token. |
+| **Penpot: Refresh** | Reload the tree. |
+
+## Known limitations
+
+- The preview is a close approximation drawn by the extension, not Penpot's own renderer. Some details differ (for example text metrics with fonts you do not have installed, masks and some blend modes). Use **Thumbnail** to compare, or **Open in Penpot**.
+- Images are downloaded through the API, so very large boards with many images take a moment.
+- Editing is not supported: this is an explorer and viewer.
+
+## Contributing
+
+Issues and pull requests are welcome at [github.com/TwoGuysDev/explorer-for-penpot](https://github.com/TwoGuysDev/explorer-for-penpot).
+
+```sh
+npm install
+npm test          # unit tests (renderer and API client)
+npm run bundle    # builds dist/extension.js
+npm run package   # creates the .vsix
+```
+
+Press **F5** in VS Code to start an Extension Development Host.
+
+## License
+
+[MIT](LICENSE) © TwoGuysDev. Penpot is a trademark of its owners and is used here only to describe what the extension works with.
