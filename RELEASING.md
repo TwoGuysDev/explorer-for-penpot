@@ -17,9 +17,10 @@ CI publishes with **Trusted Publishing** (GitHub OIDC): no token is stored anywh
 
 ### Open VSX (Cursor, VSCodium, Windsurf…)
 
-1. Sign in at <https://open-vsx.org> with GitHub, sign the Eclipse publisher agreement and create an access token.
-2. Create the namespace once: `npx ovsx create-namespace TwoGuysDev -p <token>`.
+1. Create an Eclipse account and set its **GitHub Username** to the GitHub account used on Open VSX.
+2. Sign in at <https://open-vsx.org> with GitHub; in **Settings**, log in with Eclipse, accept the publisher agreement and create an access token.
 3. Add the token as the `OVSX_PAT` secret of the `release` environment.
+4. The release workflow creates the `TwoGuysDev` namespace on its first run if it does not exist yet.
 
 ## Each release
 

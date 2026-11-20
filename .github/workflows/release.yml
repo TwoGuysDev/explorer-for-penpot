@@ -46,7 +46,13 @@ jobs:
       - name: Publish to Open VSX
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: npx ovsx publish $PRE --packagePath explorer-for-penpot.vsix
+        run: |
+          # Creates the namespace on the first release; afterwards it already exists and this is a no-op.
+          ns="$(node -p "require('./package.json').publisher")"
+          if [ "$(curl -s -o /dev/null -w '%{http_code}' "https://open-vsx.org/api/$ns")" = "404" ]; then
+            npx ovsx create-namespace "$ns"
+          fi
+          npx ovsx publish $PRE --packagePath explorer-for-penpot.vsix
 
       - name: GitHub release
         env:
