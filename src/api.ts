@@ -1,7 +1,7 @@
 // Minimal client for the Penpot RPC API (POST /api/rpc/command/<name>, camelCase JSON).
 // No VS Code imports here, so it can be unit-tested with plain Node.
 
-export type PenpotErrorKind = "connection" | "auth" | "api";
+export type PenpotErrorKind = "connection" | "auth" | "blocked" | "api";
 
 export class PenpotError extends Error {
   constructor(
@@ -107,7 +107,8 @@ export class PenpotApi {
   async rpc<T>(command: string, params: Record<string, unknown> = {}): Promise<T> {
     let res: Response;
     try {
-      res = await this.send(`/api/rpc/command/${command}`, {
+      // /api/main/methods is the current path; the legacy /api/rpc/command is behind a bot challenge on Penpot Cloud.
+      res = await this.send(`/api/main/methods/${command}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json", ...this.authHeaders() },
         body: JSON.stringify(params),
@@ -125,6 +126,9 @@ export class PenpotApi {
     }
     if (!res.ok) {
       const code = body?.code as string | undefined;
+      if (body === null && /Just a moment|cf-chl|challenge-platform/i.test(text)) {
+        throw new PenpotError(`The server blocked the request with a browser challenge (HTTP ${res.status})`, "blocked", res.status);
+      }
       if (code === "authentication-required" || res.status === 401) throw new PenpotError("Invalid or expired token", "auth", res.status, code);
       throw new PenpotError(body?.hint || body?.code || `HTTP ${res.status} on ${command}`, "api", res.status, code);
     }

@@ -32,6 +32,7 @@
   "Self-hosted Penpot…": "Penpot próprio (self-hosted)…",
   "some images did not load": "algumas imagens não carregaram",
   "Switch between fit to window and 100%": "Alternar entre caber na janela e 100%",
+  "The Penpot server blocked the request with a browser check. Try again later; if it keeps happening, please open an issue.": "O servidor do Penpot bloqueou a requisição com uma verificação de navegador. Tente de novo mais tarde; se continuar, abra uma issue.",
   "The token is invalid or expired. Run “Penpot: Connect to Penpot…” with a new token.": "O token é inválido ou expirou. Use “Penpot: Conectar ao Penpot…” com um token novo.",
   "Thumbnail": "Miniatura",
   "Use a full address, like http://localhost:9001": "Use o endereço completo, como http://localhost:9001",

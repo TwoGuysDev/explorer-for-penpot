@@ -8,6 +8,8 @@ export function describeError(err: unknown): string {
     switch (err.kind) {
       case "connection":
         return vscode.l10n.t("{0}. Is Penpot running and is the server address right?", err.message);
+      case "blocked":
+        return vscode.l10n.t("The Penpot server blocked the request with a browser check. Try again later; if it keeps happening, please open an issue.");
       case "auth":
         return vscode.l10n.t("The token is invalid or expired. Run “Penpot: Connect to Penpot…” with a new token.");
       default:

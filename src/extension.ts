@@ -1,6 +1,7 @@
 // Explorer for Penpot: a sidebar with your Penpot designs and a preview for boards.
 import * as vscode from "vscode";
 import { PenpotApi, PenpotError, isAnonymous } from "./api";
+import { describeError } from "./messages";
 import { PreviewPanel } from "./preview";
 import { PenpotNode, PenpotTree } from "./tree";
 
@@ -81,7 +82,7 @@ export function activate(ctx: vscode.ExtensionContext) {
           me.fullname ? vscode.l10n.t("Connected to Penpot as {0}.", me.fullname) : vscode.l10n.t("Connected to Penpot."),
         );
       } catch (err) {
-        vscode.window.showErrorMessage(vscode.l10n.t("Could not connect: {0}", err instanceof Error ? err.message : String(err)));
+        vscode.window.showErrorMessage(vscode.l10n.t("Could not connect: {0}", describeError(err)));
       }
     }),
 

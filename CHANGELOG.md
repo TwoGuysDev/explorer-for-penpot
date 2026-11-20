@@ -2,7 +2,14 @@
 
 All notable changes to Explorer for Penpot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] - Unreleased
+## [0.2.1] - Unreleased
+
+### Fixed
+
+- Penpot Cloud: use the current API path (`/api/main/methods`); the legacy one is behind a bot challenge and answered HTTP 403.
+- Clearer error messages when connecting, including when a server answers with a browser challenge.
+
+## [0.2.0]
 
 First public pre-release.
 

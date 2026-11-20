@@ -20,7 +20,7 @@ test("sends the command as JSON with the token", async () => {
   const api = new PenpotApi("https://penpot.test", "secret", fakeFetch({ "/get-teams": () => json([{ id: "t1", name: "Team" }]) }, calls));
   const teams = await api.getTeams();
   assert.equal(teams[0].name, "Team");
-  assert.equal(calls[0].url, "https://penpot.test/api/rpc/command/get-teams");
+  assert.equal(calls[0].url, "https://penpot.test/api/main/methods/get-teams");
   assert.equal(calls[0].init?.method, "POST");
   assert.equal((calls[0].init?.headers as any).Authorization, "Token secret");
   assert.equal((calls[0].init?.headers as any).Accept, "application/json");
@@ -47,7 +47,7 @@ test("reports connection failures with the cause", async () => {
 
 test("retries localhost on 127.0.0.1", async () => {
   const calls: Call[] = [];
-  const api = new PenpotApi("http://localhost:9001", "t", fakeFetch({ "127.0.0.1:9001/api/rpc/command/get-profile": () => json({ id: "u1", fullname: "Ana" }) }, calls));
+  const api = new PenpotApi("http://localhost:9001", "t", fakeFetch({ "127.0.0.1:9001/api/main/methods/get-profile": () => json({ id: "u1", fullname: "Ana" }) }, calls));
   const me = await api.getProfile();
   assert.equal(me.fullname, "Ana");
   assert.deepEqual(calls.map((c) => new URL(c.url).hostname), ["localhost", "127.0.0.1"]);
@@ -71,4 +71,10 @@ test("downloads assets as data URIs", async () => {
   const api = new PenpotApi("https://penpot.test", "t", fakeFetch({ "/assets/by-file-media-id/m1": () => new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/png" } }) }));
   assert.equal(await api.fileMediaDataUri("m1"), "data:image/png;base64,AQID");
   assert.equal(await api.fileMediaDataUri("missing"), undefined);
+});
+
+test("recognizes a bot challenge page instead of the API", async () => {
+  const page = () => new Response("<!DOCTYPE html><html><head><title>Just a moment...</title></head></html>", { status: 403, headers: { "content-type": "text/html" } });
+  const api = new PenpotApi("https://penpot.test", "t", fakeFetch({ "/get-profile": page }));
+  await assert.rejects(api.getProfile(), (e: unknown) => e instanceof PenpotError && e.kind === "blocked");
 });
