@@ -2,6 +2,12 @@
 
 All notable changes to Explorer for Penpot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-11-22
+
+### Fixed
+
+- Preview: inside flex and grid layouts, absolute-positioned children (such as dialogs over a board) are painted above the other children, and children follow their layout z-index, as in Penpot.
+
 ## [0.2.1] - 2026-11-20
 
 ### Fixed

@@ -61,6 +61,26 @@ test("skips hidden shapes", async () => {
   assert.doesNotMatch((await renderSvg(objects, "b", noImages)).svg, /#00E08A/);
 });
 
+test("paints absolute children of a layout above the flow children", async () => {
+  const objects = board({ layout: "flex" });
+  objects.r.layoutItemAbsolute = true; // first in the list, but absolute: must be painted last
+  const svg = (await renderSvg(objects, "b", noImages)).svg;
+  assert.ok(svg.indexOf("#00E08A") > svg.indexOf("Hi &lt;you&gt;"));
+  // Without a layout the list order wins.
+  const plain = board();
+  plain.r.layoutItemAbsolute = true;
+  const svg2 = (await renderSvg(plain, "b", noImages)).svg;
+  assert.ok(svg2.indexOf("#00E08A") < svg2.indexOf("Hi &lt;you&gt;"));
+});
+
+test("sorts layout children by z-index, keeping list order on ties", async () => {
+  const objects = board({ layout: "grid" });
+  objects.r.layoutItemZIndex = 2;
+  objects.t.layoutItemZIndex = 1;
+  const svg = (await renderSvg(objects, "b", noImages)).svg;
+  assert.ok(svg.indexOf("#00E08A") > svg.indexOf("Hi &lt;you&gt;"));
+});
+
 test("draws the top fill last (Penpot keeps fills[0] on top)", async () => {
   const objects = board({ fills: [{ fillColor: "#AAAAAA", fillOpacity: 1 }, { fillColor: "#BBBBBB", fillOpacity: 1 }] });
   const { svg } = await renderSvg(objects, "b", noImages);

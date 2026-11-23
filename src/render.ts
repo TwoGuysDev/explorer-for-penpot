@@ -265,6 +265,24 @@ function safeJson(s: string) {
   try { return JSON.parse(s); } catch { return undefined; }
 }
 
+/**
+ * Order in which a shape's children are painted (first = bottom). Plain shapes keep the `shapes`
+ * order. Inside a flex or grid layout Penpot paints absolute-positioned children above the flow
+ * children, then sorts by layout z-index, then by list order (like its sort-layout-children-z-index).
+ */
+function paintOrder(objects: Record<string, Shape>, s: Shape): string[] {
+  const ids = s.shapes || [];
+  if (!s.layout) return ids;
+  const key = (id: string) => {
+    const c = objects[id];
+    return [c?.layoutItemAbsolute === true ? 1 : 0, num(c?.layoutItemZIndex)];
+  };
+  return ids
+    .map((id, i) => ({ id, i, k: key(id) }))
+    .sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.i - b.i)
+    .map((e) => e.id);
+}
+
 async function renderShape(ctx: Ctx, s: Shape | undefined, depth: number): Promise<string> {
   if (!s || s.hidden || depth > 200) return "";
   const b = boxOf(s);
@@ -273,7 +291,7 @@ async function renderShape(ctx: Ctx, s: Shape | undefined, depth: number): Promi
   const tf = transformAttr(s, b);
   const kids = async () => {
     let o = "";
-    for (const id of s.shapes || []) o += await renderShape(ctx, ctx.objects[id], depth + 1);
+    for (const id of paintOrder(ctx.objects, s)) o += await renderShape(ctx, ctx.objects[id], depth + 1);
     return o;
   };
 
