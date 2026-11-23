@@ -102,3 +102,9 @@ test("rejects files that are not Penpot 2.x exports", () => {
   assert.equal(kind(new TextEncoder().encode("just text")), "format");
   assert.equal(kind(makeZip({ "readme.txt": "hi" })), "format");
 });
+
+test("lists a page's boards without loading every shape", () => {
+  const a = PenpotArchive.open(sampleExport());
+  assert.deepEqual(a.pageBoards(F, P1), [{ id: "b", name: "Board", width: 100, height: 60, component: false }]);
+  assert.deepEqual(a.pageBoards(F, P2), []);
+});

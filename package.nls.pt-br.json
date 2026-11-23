@@ -10,5 +10,7 @@
   "command.preview": "Pré-visualizar",
   "config.serverUrl": "Endereço do seu Penpot, sem barra no final. Use `https://design.penpot.app` para o Penpot Cloud ou o endereço do seu Penpot próprio (por exemplo `http://localhost:9001`).",
   "config.loadWebFonts": "Carregar Inter e JetBrains Mono do Google Fonts na pré-visualização, para os textos ficarem mais perto do Penpot. Desligue para usar só as fontes instaladas na máquina (sem acesso ao Google).",
-  "editor.penpotFile": "Visualizador de arquivo Penpot"
+  "editor.penpotFile": "Visualizador de arquivo Penpot",
+  "view.localFiles": "Arquivos do workspace",
+  "command.openLocal": "Abrir visualização do Penpot"
 }

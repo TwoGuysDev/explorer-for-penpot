@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { PenpotApi, PenpotError, isAnonymous } from "./api";
 import { describeError } from "./messages";
 import { PenpotFileEditor } from "./fileEditor";
+import { LocalNode, LocalTree } from "./localTree";
 import { PreviewPanel } from "./preview";
 import { PenpotNode, PenpotTree } from "./tree";
 
@@ -27,6 +28,22 @@ export function activate(ctx: vscode.ExtensionContext) {
   };
 
   ctx.subscriptions.push(PenpotFileEditor.register(ctx));
+
+  // .penpot files in the workspace (offline, no token needed).
+  const localTree = new LocalTree();
+  localTree.view = vscode.window.createTreeView("penpotExplorer.localFiles", { treeDataProvider: localTree, showCollapseAll: true });
+  ctx.subscriptions.push(
+    localTree.view,
+    localTree.watch(),
+    vscode.commands.registerCommand("penpotExplorer.refreshLocal", () => localTree.refresh()),
+    vscode.commands.registerCommand("penpotExplorer.openLocal", (arg?: LocalNode | vscode.Uri) => {
+      if (arg instanceof vscode.Uri) return PenpotFileEditor.open(arg);
+      if (!arg?.uri) return;
+      // A page opens as a whole; a board opens at that board; a file opens at its first board.
+      const target = arg.kind === "localPage" ? { ...arg.target, boardId: "" } : arg.target;
+      return PenpotFileEditor.open(arg.uri, target);
+    }),
+  );
 
   const tree = new PenpotTree(getApi);
   ctx.subscriptions.push(vscode.window.registerTreeDataProvider("penpotExplorer.tree", tree));

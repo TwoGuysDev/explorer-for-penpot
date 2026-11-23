@@ -9,7 +9,7 @@ Navegue pelos seus designs do [Penpot](https://penpot.app) sem sair do VS Code: 
 - **Barra lateral**: times → projetos → arquivos → páginas → boards, com o tamanho de cada board.
 - **Pré-visualização**: clique num board para vê-lo numa aba, desenhado em SVG a partir dos dados do Penpot (layout, textos, imagens, gradientes, bordas, sombras e desfoque). Alterne entre *caber na janela* e *100%*.
 - **Comparar com a miniatura do Penpot**: quando o editor do Penpot já gerou a miniatura do board, ela aparece ao lado.
-- **Abrir arquivos `.penpot`**: clique num `.penpot` exportado que esteja no seu workspace (por exemplo, um que fica no repositório junto do código) para navegar pelas páginas e boards e vê-los desenhados, com as imagens que vêm dentro do arquivo. Não precisa de conexão nem de token, e a visualização se atualiza quando o arquivo muda.
+- **Abrir arquivos `.penpot`**: clique num `.penpot` exportado que esteja no seu workspace (por exemplo, um que fica no repositório junto do código) para navegar pelas páginas e boards e vê-los desenhados, com as imagens que vêm dentro do arquivo. Não precisa de conexão nem de token, e a visualização se atualiza quando o arquivo muda. A seção **Arquivos do workspace**, na barra lateral do Penpot, mostra todos os `.penpot` do workspace em árvore (arquivo → páginas → boards); clique num board para abri-lo.
 - **Abrir no Penpot**: vai de um arquivo, página ou board direto para o editor do Penpot no navegador.
 - **Penpot Cloud e self-hosted**: funciona com o `design.penpot.app` e com o seu Penpot próprio (inclusive `localhost`).
 - **Inglês e português do Brasil.**

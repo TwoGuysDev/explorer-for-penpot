@@ -11,7 +11,7 @@ Browse your [Penpot](https://penpot.app) designs without leaving VS Code: teams,
 - **Sidebar explorer**: teams → projects → files → pages → boards, with each board's size.
 - **Board preview**: click a board to see it in a tab, drawn as SVG from Penpot's data (layouts, text, images, gradients, strokes, shadows and blur). Switch between *fit to window* and *100%*.
 - **Compare with Penpot's thumbnail**: when the Penpot editor has already generated a thumbnail for the board, show it next to the preview.
-- **Open `.penpot` files**: click a `.penpot` export in your workspace (for example one committed next to your code) to browse its pages and boards and see them drawn, with the images inside the file. No connection or token needed, and the view refreshes when the file changes.
+- **Open `.penpot` files**: click a `.penpot` export in your workspace (for example one committed next to your code) to browse its pages and boards and see them drawn, with the images inside the file. No connection or token needed, and the view refreshes when the file changes. The **Workspace Files** section of the Penpot sidebar lists every `.penpot` in the workspace as a tree (file → pages → boards); click a board to open it.
 - **Open in Penpot**: jump from a file, page or board straight to the Penpot editor in your browser.
 - **Penpot Cloud and self-hosted**: works with `design.penpot.app` and with your own instance (including `localhost`).
 - **English and Brazilian Portuguese.**

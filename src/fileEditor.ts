@@ -3,6 +3,7 @@
 import * as vscode from "vscode";
 import { ROOT_ID, Shape } from "./api";
 import { ArchiveError, PenpotArchive } from "./archive";
+import type { LocalTarget } from "./localTree";
 import { describeWarning } from "./messages";
 import { renderSvg } from "./render";
 import { pageBoards } from "./tree";
@@ -76,6 +77,23 @@ export class PenpotFileEditor implements vscode.CustomReadonlyEditorProvider<Pen
     });
   }
 
+  /** Open previews by document URI (the most recent one), so the tree can move them to a board. */
+  private static readonly panels = new Map<string, { panel: vscode.WebviewPanel; select(t: LocalTarget): void }>();
+  /** Where a preview that is about to open should start. */
+  private static readonly pending = new Map<string, LocalTarget>();
+
+  /** Opens a .penpot file in this editor, showing the given page or board. */
+  static async open(uri: vscode.Uri, target: LocalTarget = {}) {
+    const open = PenpotFileEditor.panels.get(uri.toString());
+    if (open) {
+      open.panel.reveal(undefined, false);
+      open.select(target);
+      return;
+    }
+    PenpotFileEditor.pending.set(uri.toString(), target);
+    await vscode.commands.executeCommand("vscode.openWith", uri, PenpotFileEditor.viewType);
+  }
+
   private constructor(private readonly ctx: vscode.ExtensionContext) {}
 
   async openCustomDocument(uri: vscode.Uri): Promise<PenpotDocument> {
@@ -89,8 +107,16 @@ export class PenpotFileEditor implements vscode.CustomReadonlyEditorProvider<Pen
     panel.webview.html = this.html();
 
     const post = (msg: unknown) => void panel.webview.postMessage(msg);
-    const sendStructure = () =>
-      post(doc.archive ? { type: "structure", files: doc.archive.files } : { type: "error", message: doc.error });
+    const key = doc.uri.toString();
+    let initial = PenpotFileEditor.pending.get(key);
+    PenpotFileEditor.pending.delete(key);
+    const sendStructure = () => {
+      post(doc.archive ? { type: "structure", files: doc.archive.files, target: initial } : { type: "error", message: doc.error });
+      initial = undefined;
+    };
+    const entry = { panel, select: (target: LocalTarget) => post({ type: "select", target }) };
+    PenpotFileEditor.panels.set(key, entry);
+    panel.onDidChangeViewState(() => { if (panel.active) PenpotFileEditor.panels.set(key, entry); });
 
     let last: ShowRequest | undefined;
     const show = async (req: ShowRequest) => {
@@ -147,7 +173,14 @@ export class PenpotFileEditor implements vscode.CustomReadonlyEditorProvider<Pen
       };
       subs.push(watcher, watcher.onDidChange(reload), watcher.onDidCreate(reload), { dispose: () => clearTimeout(timer) });
     }
-    panel.onDidDispose(() => subs.forEach((d) => d.dispose()), null, this.ctx.subscriptions);
+    panel.onDidDispose(
+      () => {
+        if (PenpotFileEditor.panels.get(key) === entry) PenpotFileEditor.panels.delete(key);
+        subs.forEach((d) => d.dispose());
+      },
+      null,
+      this.ctx.subscriptions,
+    );
   }
 
   private html() {
@@ -251,8 +284,9 @@ ${webFonts ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?fam
     if (m.type === 'error') {
       $('msg').textContent = m.message; $('msg').className = 'msg err'; $('msg').hidden = false;
       $('render').replaceChildren(); $('info').textContent = '';
-    } else if (m.type === 'structure') {
-      files = m.files;
+    } else if (m.type === 'structure' || m.type === 'select') {
+      if (m.target) state = m.target;
+      if (m.type === 'structure') files = m.files;
       $('fileBox').hidden = files.length < 2;
       options(fileSel, files.map((f) => ({ id: f.id, label: f.name })), state.fileId);
       fillPages();

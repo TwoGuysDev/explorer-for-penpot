@@ -2,7 +2,7 @@
   "name": "explorer-for-penpot",
   "displayName": "Explorer for Penpot",
   "description": "%extension.description%",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "TwoGuysDev",
   "author": "TwoGuysDev",
   "license": "MIT",
@@ -57,6 +57,10 @@
         {
           "id": "penpotExplorer.tree",
           "name": "%view.tree%"
+        },
+        {
+          "id": "penpotExplorer.localFiles",
+          "name": "%view.localFiles%"
         }
       ]
     },
@@ -96,6 +100,18 @@
         "title": "%command.preview%",
         "category": "Penpot",
         "icon": "$(eye)"
+      },
+      {
+        "command": "penpotExplorer.refreshLocal",
+        "title": "%command.refresh%",
+        "category": "Penpot",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "penpotExplorer.openLocal",
+        "title": "%command.openLocal%",
+        "category": "Penpot",
+        "icon": "$(eye)"
       }
     ],
     "menus": {
@@ -113,6 +129,11 @@
         {
           "command": "penpotExplorer.disconnect",
           "when": "view == penpotExplorer.tree && penpotExplorer.hasToken"
+        },
+        {
+          "command": "penpotExplorer.refreshLocal",
+          "when": "view == penpotExplorer.localFiles",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -125,6 +146,11 @@
           "command": "penpotExplorer.openInBrowser",
           "when": "view == penpotExplorer.tree && viewItem =~ /^(file|page|frame)$/",
           "group": "inline"
+        },
+        {
+          "command": "penpotExplorer.openLocal",
+          "when": "view == penpotExplorer.localFiles && viewItem =~ /^(localFile|localDesign|localPage)$/",
+          "group": "inline"
         }
       ],
       "commandPalette": [
@@ -135,6 +161,21 @@
         {
           "command": "penpotExplorer.openInBrowser",
           "when": "false"
+        },
+        {
+          "command": "penpotExplorer.openLocal",
+          "when": "false"
+        },
+        {
+          "command": "penpotExplorer.refreshLocal",
+          "when": "false"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "penpotExplorer.openLocal",
+          "when": "resourceExtname == .penpot",
+          "group": "navigation"
         }
       ]
     },

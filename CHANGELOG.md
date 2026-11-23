@@ -2,6 +2,12 @@
 
 All notable changes to Explorer for Penpot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-23
+
+### Added
+
+- **Workspace Files** view in the Penpot sidebar: every `.penpot` in the workspace as a tree (file → pages → boards), offline. A click on a board opens the preview at that board; files and pages have a preview button, and `.penpot` files get “Open Penpot Preview” in the Explorer context menu.
+
 ## [0.3.0] - 2026-11-22
 
 ### Added

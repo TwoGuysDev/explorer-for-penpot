@@ -10,5 +10,7 @@
   "command.preview": "Preview",
   "config.serverUrl": "Address of your Penpot instance, without a trailing slash. Use `https://design.penpot.app` for Penpot Cloud or the URL of your self-hosted Penpot (for example `http://localhost:9001`).",
   "config.loadWebFonts": "Load Inter and JetBrains Mono from Google Fonts in the preview, so text looks closer to Penpot. Turn off to use only fonts installed on your machine (no request to Google).",
-  "editor.penpotFile": "Penpot File Preview"
+  "editor.penpotFile": "Penpot File Preview",
+  "view.localFiles": "Workspace Files",
+  "command.openLocal": "Open Penpot Preview"
 }

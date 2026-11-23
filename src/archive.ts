@@ -3,11 +3,12 @@
 // files/<file>/pages/<page>/<shape>.json, files/<file>/media/<id>.json (points to a storage object),
 // files/<file>/thumbnails/frame/**.json and objects/<storage id>.<ext> (the image bytes).
 // No VS Code imports here, so it can be unit-tested with plain Node.
-import type { Shape } from "./api";
+import { ROOT_ID, Shape } from "./api";
 import { ZipError, ZipReader } from "./zip";
 
 export interface ArchivePage { id: string; name: string }
 export interface ArchiveFile { id: string; name: string; pages: ArchivePage[] }
+export interface ArchiveBoard { id: string; name: string; width?: number; height?: number; component: boolean }
 
 export class ArchiveError extends Error {
   constructor(message: string, readonly kind: "format" | "legacy" | "broken") {
@@ -102,6 +103,29 @@ export class PenpotArchive {
       if (s && typeof s.id === "string") objects[s.id] = s;
     }
     return objects;
+  }
+
+  /**
+   * Top-level boards of a page, in the order of Penpot's layers panel (top-most first). Reads only
+   * the page root and its direct children, so listing is cheap even for heavy pages.
+   */
+  pageBoards(fileId: string, pageId: string): ArchiveBoard[] {
+    const dir = `files/${fileId}/pages/${pageId}/`;
+    const read = (id: string): Shape | undefined => {
+      try { return this.zip.has(`${dir}${id}.json`) ? this.zip.readJson<Shape>(`${dir}${id}.json`) : undefined; } catch { return undefined; }
+    };
+    const root = read(ROOT_ID);
+    return [...(root?.shapes || [])]
+      .reverse()
+      .map(read)
+      .filter((s): s is Shape => !!s && s.type === "frame")
+      .map((s) => ({
+        id: s.id,
+        name: String(s.name || s.id),
+        width: typeof s.width === "number" ? s.width : undefined,
+        height: typeof s.height === "number" ? s.height : undefined,
+        component: !!(s.componentRoot || s.mainInstance),
+      }));
   }
 
   private blobDataUri(storageId: string, mime?: string): string | undefined {
