@@ -2,7 +2,7 @@
   "name": "explorer-for-penpot",
   "displayName": "Explorer for Penpot",
   "description": "%extension.description%",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "publisher": "TwoGuysDev",
   "author": "TwoGuysDev",
   "license": "MIT",
@@ -152,7 +152,19 @@
           "markdownDescription": "%config.loadWebFonts%"
         }
       }
-    }
+    },
+    "customEditors": [
+      {
+        "viewType": "penpotExplorer.penpotFile",
+        "displayName": "%editor.penpotFile%",
+        "selector": [
+          {
+            "filenamePattern": "*.penpot"
+          }
+        ],
+        "priority": "default"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run bundle",

@@ -11,6 +11,7 @@ Browse your [Penpot](https://penpot.app) designs without leaving VS Code: teams,
 - **Sidebar explorer**: teams → projects → files → pages → boards, with each board's size.
 - **Board preview**: click a board to see it in a tab, drawn as SVG from Penpot's data (layouts, text, images, gradients, strokes, shadows and blur). Switch between *fit to window* and *100%*.
 - **Compare with Penpot's thumbnail**: when the Penpot editor has already generated a thumbnail for the board, show it next to the preview.
+- **Open `.penpot` files**: click a `.penpot` export in your workspace (for example one committed next to your code) to browse its pages and boards and see them drawn, with the images inside the file. No connection or token needed, and the view refreshes when the file changes.
 - **Open in Penpot**: jump from a file, page or board straight to the Penpot editor in your browser.
 - **Penpot Cloud and self-hosted**: works with `design.penpot.app` and with your own instance (including `localhost`).
 - **English and Brazilian Portuguese.**
@@ -30,6 +31,7 @@ Access tokens must be enabled on your instance. Add `enable-access-tokens` to `P
 ## Privacy and security
 
 - Your access token is stored in VS Code's **secret storage** (your operating system's credential store), never in settings or files.
+- `.penpot` files are read locally and never sent anywhere.
 - The extension only talks to the Penpot server you configure, using Penpot's public RPC API with your token. It is **read-only**: it never changes your designs.
 - **No telemetry.** The extension collects nothing.
 - By default the preview loads the Inter and JetBrains Mono fonts from Google Fonts so text looks closer to Penpot. Turn off `penpotExplorer.preview.loadWebFonts` to avoid that request.
@@ -54,6 +56,7 @@ Access tokens must be enabled on your instance. Add `enable-access-tokens` to `P
 
 - The preview is a close approximation drawn by the extension, not Penpot's own renderer. Some details differ (for example text metrics with fonts you do not have installed, masks and some blend modes). Use **Thumbnail** to compare, or **Open in Penpot**.
 - Images are downloaded through the API, so very large boards with many images take a moment.
+- `.penpot` files from Penpot 1.x (the old binary format) cannot be previewed: import them into Penpot 2.x and export them again.
 - Editing is not supported: this is an explorer and viewer.
 
 ## Contributing

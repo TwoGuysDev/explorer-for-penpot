@@ -2,6 +2,12 @@
 
 All notable changes to Explorer for Penpot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-22
+
+### Added
+
+- Open `.penpot` files from the workspace: a click shows their pages and boards drawn offline, with the images and thumbnails stored in the export, and the view follows changes to the file.
+
 ## [0.2.2] - 2026-11-22
 
 ### Fixed

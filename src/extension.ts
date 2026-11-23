@@ -2,6 +2,7 @@
 import * as vscode from "vscode";
 import { PenpotApi, PenpotError, isAnonymous } from "./api";
 import { describeError } from "./messages";
+import { PenpotFileEditor } from "./fileEditor";
 import { PreviewPanel } from "./preview";
 import { PenpotNode, PenpotTree } from "./tree";
 
@@ -24,6 +25,8 @@ export function activate(ctx: vscode.ExtensionContext) {
     if (cached?.key !== key) cached = { key, api: new PenpotApi(serverUrl(), token) };
     return cached.api;
   };
+
+  ctx.subscriptions.push(PenpotFileEditor.register(ctx));
 
   const tree = new PenpotTree(getApi);
   ctx.subscriptions.push(vscode.window.registerTreeDataProvider("penpotExplorer.tree", tree));
