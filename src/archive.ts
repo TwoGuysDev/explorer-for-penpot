@@ -1,10 +1,11 @@
-// Reads a .penpot export (Penpot 2.x: a ZIP with one JSON per object) so it can be previewed offline.
+// Reads a .penpot export (Penpot 2.x: a ZIP with one JSON per object) so it can be previewed offline,
+// and writes it back with changed shapes (used by the MCP server).
 // Layout: manifest.json, files/<file>.json, files/<file>/pages/<page>.json (name and index),
 // files/<file>/pages/<page>/<shape>.json, files/<file>/media/<id>.json (points to a storage object),
 // files/<file>/thumbnails/frame/**.json and objects/<storage id>.<ext> (the image bytes).
 // No VS Code imports here, so it can be unit-tested with plain Node.
 import { ROOT_ID, Shape } from "./api";
-import { ZipError, ZipReader } from "./zip";
+import { ZipError, ZipReader, ZipSource, writeZip } from "./zip";
 
 export interface ArchivePage { id: string; name: string }
 export interface ArchiveFile { id: string; name: string; pages: ArchivePage[] }
@@ -174,5 +175,47 @@ export class PenpotArchive {
     }
     const media = map.get(frameId);
     return media ? this.blobDataUri(media) : undefined;
+  }
+
+  /** ZIP entry that holds a shape of a page. */
+  shapeEntry(fileId: string, pageId: string, shapeId: string) {
+    return `files/${fileId}/pages/${pageId}/${shapeId}.json`;
+  }
+
+  /**
+   * Entries of the thumbnails Penpot saved for these boards (the JSON and the image it points to).
+   * They go stale when a board changes, so the writer drops them and Penpot draws new ones.
+   */
+  thumbnailEntries(fileId: string, frameIds: Iterable<string>): string[] {
+    const wanted = new Set(frameIds);
+    const out: string[] = [];
+    if (!wanted.size) return out;
+    const prefix = `files/${fileId}/thumbnails/`;
+    for (const [d, names] of this.dirs) {
+      if (!d.startsWith(prefix)) continue;
+      for (const n of names) {
+        if (!n.endsWith(".json")) continue;
+        try {
+          const t = this.zip.readJson(n);
+          if (!wanted.has(String(t.frameId))) continue;
+          out.push(n);
+          const blob = t.mediaId && this.blobs.get(String(t.mediaId));
+          if (blob) out.push(blob, `objects/${t.mediaId}.json`);
+        } catch { /* ignore a broken thumbnail */ }
+      }
+    }
+    return out.filter((n) => this.zip.has(n));
+  }
+
+  /** A new .penpot with some entries replaced or added (bytes) or removed (null); the rest is copied as is. */
+  rewrite(changes: Map<string, Uint8Array | null>): Uint8Array {
+    const sources: ZipSource[] = [];
+    for (const name of this.zip.entries.keys()) {
+      const c = changes.get(name);
+      if (c === null) continue;
+      sources.push(c ? { name, content: c } : { name, copy: this.zip.raw(name) });
+    }
+    for (const [name, c] of changes) if (c && !this.zip.has(name)) sources.push({ name, content: c });
+    return writeZip(sources);
   }
 }

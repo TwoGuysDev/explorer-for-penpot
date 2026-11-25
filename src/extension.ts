@@ -4,6 +4,7 @@ import { PenpotApi, PenpotError, isAnonymous } from "./api";
 import { describeError } from "./messages";
 import { PenpotFileEditor } from "./fileEditor";
 import { LocalNode, LocalTree } from "./localTree";
+import { McpHost } from "./mcpHost";
 import { PreviewPanel } from "./preview";
 import { PenpotNode, PenpotTree } from "./tree";
 
@@ -28,6 +29,9 @@ export function activate(ctx: vscode.ExtensionContext) {
   };
 
   ctx.subscriptions.push(PenpotFileEditor.register(ctx));
+
+  // MCP server for AI assistants (off until enabled in the settings or with “Penpot: Start MCP Server”).
+  new McpHost(ctx, getApi);
 
   // .penpot files in the workspace (offline, no token needed).
   const localTree = new LocalTree();

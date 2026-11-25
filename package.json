@@ -24,7 +24,9 @@
     "design",
     "ui",
     "preview",
-    "design handoff"
+    "design handoff",
+    "mcp",
+    "ai"
   ],
   "categories": [
     "Visualization",
@@ -112,6 +114,26 @@
         "title": "%command.openLocal%",
         "category": "Penpot",
         "icon": "$(eye)"
+      },
+      {
+        "command": "penpotExplorer.mcp.start",
+        "title": "%command.mcpStart%",
+        "category": "Penpot"
+      },
+      {
+        "command": "penpotExplorer.mcp.stop",
+        "title": "%command.mcpStop%",
+        "category": "Penpot"
+      },
+      {
+        "command": "penpotExplorer.mcp.copySetup",
+        "title": "%command.mcpCopySetup%",
+        "category": "Penpot"
+      },
+      {
+        "command": "penpotExplorer.mcp.menu",
+        "title": "%command.mcpMenu%",
+        "category": "Penpot"
       }
     ],
     "menus": {
@@ -169,6 +191,10 @@
         {
           "command": "penpotExplorer.refreshLocal",
           "when": "false"
+        },
+        {
+          "command": "penpotExplorer.mcp.menu",
+          "when": "false"
         }
       ],
       "explorer/context": [
@@ -191,6 +217,18 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.loadWebFonts%"
+        },
+        "penpotExplorer.mcp.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.mcpEnabled%"
+        },
+        "penpotExplorer.mcp.port": {
+          "type": "number",
+          "default": 4410,
+          "minimum": 1024,
+          "maximum": 65535,
+          "markdownDescription": "%config.mcpPort%"
         }
       }
     },

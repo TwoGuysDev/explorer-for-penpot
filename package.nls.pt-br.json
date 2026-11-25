@@ -12,5 +12,11 @@
   "config.loadWebFonts": "Carregar Inter e JetBrains Mono do Google Fonts na pré-visualização, para os textos ficarem mais perto do Penpot. Desligue para usar só as fontes instaladas na máquina (sem acesso ao Google).",
   "editor.penpotFile": "Visualizador de arquivo Penpot",
   "view.localFiles": "Arquivos do workspace",
-  "command.openLocal": "Abrir visualização do Penpot"
+  "command.openLocal": "Abrir visualização do Penpot",
+  "command.mcpStart": "Iniciar servidor MCP",
+  "command.mcpStop": "Parar servidor MCP",
+  "command.mcpCopySetup": "Copiar configuração do MCP para o Claude Code",
+  "command.mcpMenu": "Opções do servidor MCP",
+  "config.mcpEnabled": "Roda um servidor [MCP](https://modelcontextprotocol.io) local para que assistentes de IA (como o Claude Code) leiam e editem os arquivos `.penpot` do workspace, sem navegador nem servidor do Penpot. Ele só escuta em `127.0.0.1`.",
+  "config.mcpPort": "Porta do servidor MCP (`http://127.0.0.1:<porta>/mcp`)."
 }

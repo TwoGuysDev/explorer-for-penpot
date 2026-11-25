@@ -2,6 +2,12 @@
 
 All notable changes to Explorer for Penpot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **MCP server** (off by default; **Penpot: Start MCP Server**): AI assistants such as Claude Code can read and edit the `.penpot` files of the workspace, with no browser and no Penpot server. Tools: `list_designs`, `get_structure`, `get_layers`, `get_shapes`, `edit` (create, update, move, duplicate, delete in one batch) and `screenshot` (PNG). Flex boards are laid out again after each edit, as Penpot does. Listens on `127.0.0.1` only.
+
 ## [0.4.0] - 2026-11-23
 
 ### Added
