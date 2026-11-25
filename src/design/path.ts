@@ -378,7 +378,7 @@ export function parseSvg(src: string, currentColor = "#000000"): SvgDoc {
     }
     const segs = transformSegs(parsePath(d), mm);
     if (!segs.length) return;
-    const fillV = st.fill ?? "#000000";
+    const fillV = st.fill ?? currentColor; // unset fills are black in SVG; the caller's color (black by default) stands in
     if (/url\(/.test(fillV) || /url\(/.test(st.stroke || "")) warn("gradients and patterns are not supported; black was used");
     const fill = /url\(/.test(fillV) ? "#000000" : color(fillV, currentColor, warn) ?? undefined;
     const strokeV = st.stroke;

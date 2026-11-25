@@ -69,7 +69,7 @@ const PROPS_SCHEMA = {
     fontSize: { type: "number" },
     fontWeight: { type: ["number", "string"] },
     fontStyle: { enum: ["normal", "italic"] },
-    color: { type: "string", description: "Texts: #RRGGBB. SVGs: the value of currentColor." },
+    color: { type: "string", description: "Texts: #RRGGBB. SVGs: the icon color (replaces currentColor and fills that are not set)." },
     lineHeight: { type: "number", description: "Multiplier, e.g. 1.2." },
     letterSpacing: { type: "number" },
     textAlign: { enum: ["left", "center", "right", "justify"] },
@@ -417,8 +417,8 @@ export class Tools {
             const src = id(op.id, "id");
             const { id: nid, copies } = ed.duplicate(src, parent(op.parent), op.index, op.offset);
             if (op.ref) refs.set(String(op.ref), nid);
-            created.push(op.ref ? `${op.ref}=${nid}` : nid);
-            duplicated.push({ label: op.ref ? `${op.ref}` : nid, src, copies });
+            created.push(op.ref ? `$${op.ref}=${nid}` : nid);
+            duplicated.push({ label: op.ref ? `$${op.ref}` : nid, src, copies });
             break;
           }
           default: throw new EditError(`Unknown op "${op?.op}".`);
