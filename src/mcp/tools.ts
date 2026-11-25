@@ -69,7 +69,7 @@ const PROPS_SCHEMA = {
     fontSize: { type: "number" },
     fontWeight: { type: ["number", "string"] },
     fontStyle: { enum: ["normal", "italic"] },
-    color: { type: "string", description: "Texts: #RRGGBB." },
+    color: { type: "string", description: "Texts: #RRGGBB. SVGs: the value of currentColor." },
     lineHeight: { type: "number", description: "Multiplier, e.g. 1.2." },
     letterSpacing: { type: "number" },
     textAlign: { enum: ["left", "center", "right", "justify"] },
@@ -77,6 +77,9 @@ const PROPS_SCHEMA = {
     textTransform: { enum: ["none", "uppercase", "lowercase", "capitalize"] },
     growType: { enum: ["auto-width", "auto-height", "fixed"] },
     verticalAlign: { enum: ["top", "center", "bottom"] },
+    d: { type: "string", description: 'Paths: SVG path data (any commands, e.g. "M4 12h16"), in viewBox coordinates. Scaled to width/height.' },
+    viewBox: { type: "array", items: { type: "number" }, minItems: 4, maxItems: 4, description: "Paths: [x, y, width, height] that d is drawn in (default: the path's own bounds), e.g. [0, 0, 24, 24] for a 24 px icon." },
+    svg: { type: "string", description: "Type svg: SVG markup (paths, rect, circle, ellipse, line, polyline, polygon, groups, transforms). Becomes a path, or a group of paths, scaled to width/height keeping its proportions." },
     raw: { type: "object", description: "Escape hatch: Penpot attributes in camelCase, set as is." },
   },
   additionalProperties: false,
@@ -129,7 +132,7 @@ export const TOOLS: ToolDef[] = [
     name: "edit",
     title: "Edit a page",
     description:
-      'Applies a list of operations to one page and saves once. Flex boards are laid out again afterwards (children positions, fill and auto sizes), as Penpot does. Operations: {op:"create", type:"board"|"rect"|"ellipse"|"text", parent?, index?, ref?, props}, {op:"update", id, props}, {op:"delete", ids}, {op:"move", ids, parent?, index?}, {op:"duplicate", id, parent?, index?, ref?, offset?:{x,y}}. parent defaults to the page; index counts from the top of the layers panel (0 = top / first in a flex flow). A create or duplicate with ref:"card" can be used later in the same call as "$card". Text sizes are estimated until the file is opened in Penpot. Component copies keep their link (changes become overrides); component mains cannot be deleted here.',
+      'Applies a list of operations to one page and saves once. Flex boards are laid out again afterwards (children positions, fill and auto sizes), as Penpot does. Operations: {op:"create", type:"board"|"rect"|"ellipse"|"text"|"path"|"svg", parent?, index?, ref?, props}, {op:"update", id, props}, {op:"delete", ids}, {op:"move", ids, parent?, index?}, {op:"duplicate", id, parent?, index?, ref?, offset?:{x,y}}. parent defaults to the page; index counts from the top of the layers panel (0 = top / first in a flex flow). Without index, a new or moved shape goes last in a flex flow (on top elsewhere) and a duplicate goes right after its original. A create or duplicate with ref:"card" can be used later in the same call as "$card", and its layers as "$card/Title" or "$card/Header/Avatar" (child names). Icons: type "svg" with props.svg, or type "path" with props.d and viewBox. A duplicate reports the new id of every copied layer. Text sizes are estimated until the file is opened in Penpot. Component copies keep their link (changes become overrides); component mains cannot be deleted here.',
     inputSchema: {
       type: "object",
       properties: {
@@ -140,7 +143,7 @@ export const TOOLS: ToolDef[] = [
             type: "object",
             properties: {
               op: { enum: ["create", "update", "delete", "move", "duplicate"] },
-              type: { enum: ["board", "rect", "ellipse", "text"] },
+              type: { enum: ["board", "rect", "ellipse", "text", "path", "svg"] },
               id: { type: "string" },
               ids: { type: "array", items: { type: "string" } },
               parent: { type: "string" },
@@ -161,7 +164,7 @@ export const TOOLS: ToolDef[] = [
     name: "screenshot",
     title: "Screenshot",
     description:
-      "PNG of a board, of any shape, or of the whole page, drawn by the extension (an approximation of Penpot's rendering; fonts fall back to system fonts). Also shows it to the user in VS Code.",
+      "PNG of a board, of any shape, or of the whole page, drawn by the extension (an approximation of Penpot's rendering: Inter and Source Sans are built in, other fonts fall back to system fonts; texts not yet laid out by Penpot are wrapped with estimated metrics). Also shows it to the user in VS Code.",
     inputSchema: {
       type: "object",
       properties: {
@@ -379,20 +382,29 @@ export class Tools {
     const id = (v: unknown, what: string): string => {
       if (typeof v !== "string" || !v) throw new EditError(`Missing ${what}.`);
       if (v.startsWith("$")) {
-        const got = refs.get(v.slice(1));
-        if (!got) throw new EditError(`Unknown reference ${v} (define it with ref in an earlier create or duplicate).`);
+        const [name, ...path] = v.slice(1).split("/");
+        const first = refs.get(name);
+        if (!first) throw new EditError(`Unknown reference ${name} (define it with ref in an earlier create or duplicate).`);
+        let got: string = first;
+        for (const part of path) {
+          const kids: Shape[] = (ed.get(got).shapes || []).map((c: string) => ed.objects[c]).filter(Boolean).reverse();
+          const hit: Shape | undefined = kids.find((k: Shape) => k.name === part) || kids.find((k: Shape) => k.name.toLowerCase() === part.toLowerCase());
+          if (!hit) throw new EditError(`${v}: "${ed.get(got).name}" has no layer "${part}" (children: ${kids.map((k: Shape) => k.name).join(", ") || "none"}).`);
+          got = hit.id;
+        }
         return got;
       }
       return v;
     };
     const parent = (v: unknown) => (v === undefined || v === null || v === "" || v === "root" ? undefined : id(v, "parent"));
     const created: string[] = [];
+    const duplicated: { label: string; src: string; copies: Map<string, string> }[] = [];
     ops.forEach((op, i) => {
       try {
         switch (op?.op) {
           case "create": {
             const kind = op.type as ShapeKind;
-            if (!["board", "rect", "ellipse", "text"].includes(kind)) throw new EditError(`type must be board, rect, ellipse or text.`);
+            if (!["board", "rect", "ellipse", "text", "path", "svg"].includes(kind)) throw new EditError(`type must be board, rect, ellipse, text, path or svg.`);
             const nid = ed.create(kind, parent(op.parent), (op.props || {}) as ShapeProps, op.index);
             if (op.ref) refs.set(String(op.ref), nid);
             created.push(op.ref ? `$${op.ref}=${nid}` : nid);
@@ -402,9 +414,11 @@ export class Tools {
           case "delete": ed.remove((Array.isArray(op.ids) ? op.ids : [op.id]).map((x: unknown) => id(x, "ids"))); break;
           case "move": ed.move((Array.isArray(op.ids) ? op.ids : [op.id]).map((x: unknown) => id(x, "ids")), parent(op.parent), op.index); break;
           case "duplicate": {
-            const nid = ed.duplicate(id(op.id, "id"), parent(op.parent), op.index, op.offset);
+            const src = id(op.id, "id");
+            const { id: nid, copies } = ed.duplicate(src, parent(op.parent), op.index, op.offset);
             if (op.ref) refs.set(String(op.ref), nid);
-            created.push(op.ref ? `$${op.ref}=${nid}` : nid);
+            created.push(op.ref ? `${op.ref}=${nid}` : nid);
+            duplicated.push({ label: op.ref ? `${op.ref}` : nid, src, copies });
             break;
           }
           default: throw new EditError(`Unknown op "${op?.op}".`);
@@ -424,6 +438,22 @@ export class Tools {
     this.host.edited(args.design, file.id, page.id, [...boards]);
     const lines = [`Saved page "${page.name}": ${diff.added.length} created, ${diff.changed.length} changed, ${diff.removed.length} deleted.`];
     if (created.length) lines.push(`New ids: ${created.join(", ")}`);
+    for (const d of duplicated) {
+      const copy = d.copies.get(d.src);
+      if (!copy || !ed.objects[copy] || d.copies.size < 2) continue;
+      lines.push(`Layers of the copy ${d.label} (new id ← original id):`);
+      const MAX = 300;
+      let n = 0;
+      const walk = (cid: string, level: number) => {
+        const s = ed.objects[cid];
+        if (!s || n++ >= MAX) return;
+        const orig = [...d.copies].find(([, c]) => c === cid)?.[0];
+        if (level > 0) lines.push(`${"  ".repeat(level)}- ${s.name} [${s.type === "frame" ? "board" : s.type === "circle" ? "ellipse" : s.type}] ${cid} ← ${orig}`);
+        for (const c of [...(s.shapes || [])].reverse()) walk(c, level + 1);
+      };
+      walk(copy, 0);
+      if (n > MAX) lines.push(`  … ${d.copies.size - MAX} more (see get_layers root=${copy}).`);
+    }
     if (ed.warnings.length) lines.push("Notes:", ...ed.warnings.map((w) => `- ${w}`));
     return ok(lines.join("\n"));
   }

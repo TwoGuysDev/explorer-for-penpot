@@ -2,6 +2,19 @@
 
 All notable changes to Explorer for Penpot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- MCP `edit`: icons. `create` with type `svg` turns SVG markup (paths, basic shapes, groups, transforms) into Penpot paths, and type `path` takes SVG path data with a `viewBox`; both are scaled to the requested size. Paths can be resized and laid out like other shapes.
+- MCP `edit`: layers of a shape created or duplicated with `ref` can be used in the same call as `$ref/Child/Grandchild`, and `duplicate` lists the new id of every copied layer.
+
+### Fixed
+
+- MCP `edit`: without `index`, a new or moved shape goes last in a flex layout's flow (it used to go first, so screens came out in reverse order), and a duplicate goes right after its original.
+- MCP `screenshot`: texts not yet laid out by Penpot wrap to their width and follow their horizontal and vertical alignment; Inter and Source Sans are built in, so texts keep their real widths.
+- The MCP server starts when VS Code opens (when it is enabled), not only after the Penpot view was opened.
+
 ## [0.5.0] - 2026-11-25
 
 ### Added

@@ -2,6 +2,7 @@
 // gradients, strokes, shadows and blur). Coordinates from the API are already absolute in the page.
 // No VS Code imports here, so it can be unit-tested with plain Node.
 import { ROOT_ID, Shape } from "./api";
+import { textRows } from "./design/text";
 
 export interface RenderOptions {
   /** Resolves a fill image to a data URI (or undefined when it cannot). */
@@ -210,8 +211,10 @@ function transformAttr(s: Shape, b: Box | undefined): string {
 }
 
 function fontStack(family: string | undefined) {
-  const f = (family || "Inter").replace(/"/g, "");
-  return `'${f}', Inter, system-ui, sans-serif`;
+  const f = (family || "Inter").replace(/["']/g, "");
+  // Penpot's default font is its own Source Sans Pro ("sourcesanspro"); Source Sans 3 is its successor.
+  const alias = /^source ?sans/i.test(f) ? ", 'Source Sans 3'" : "";
+  return `'${f}'${alias}, Inter, system-ui, sans-serif`;
 }
 
 /** Text: uses positionData (lines already laid out by the editor); falls back to the raw content. */
@@ -239,24 +242,26 @@ function renderText(s: Shape, b: Box | undefined): string {
     return out;
   }
   if (!b) return "";
-  // No positions: join the content leaves, one line per paragraph.
-  const lines: { text: string; leaf: any }[] = [];
-  const walk = (n: any) => {
-    if (!n) return;
-    if (n.type === "paragraph") {
-      const leaves = (n.children || []).filter((c: any) => typeof c.text === "string");
-      lines.push({ text: leaves.map((l: any) => l.text).join(""), leaf: leaves[0] || n });
-      return;
+  // No positions (texts edited outside Penpot): wrap and align the paragraphs like the editor estimates them.
+  const content = typeof s.content === "string" ? safeJson(s.content) : s.content;
+  const rows = textRows(content, s.growType, b.w);
+  const total = rows.reduce((h, r) => h + r.style.fontSize * r.style.lineHeight, 0);
+  const va = content?.verticalAlign;
+  let y = b.y + (va === "center" ? (b.h - total) / 2 : va === "bottom" ? b.h - total : 0);
+  for (const { text, style: st } of rows) {
+    const fs = st.fontSize;
+    const lh = st.lineHeight * fs;
+    const anchor = st.textAlign === "center" ? "middle" : st.textAlign === "right" ? "end" : "start";
+    const x = anchor === "middle" ? b.x + b.w / 2 : anchor === "end" ? b.x + b.w : b.x;
+    const tt = st.textTransform === "uppercase" ? text.toUpperCase() : st.textTransform === "lowercase" ? text.toLowerCase() : text;
+    if (tt.trim()) {
+      out +=
+        `<text x="${r2(x)}" y="${r2(y + lh / 2 + fs * 0.35)}" text-anchor="${anchor}" font-family="${esc(fontStack(st.fontFamily))}" font-size="${fs}" ` +
+        `font-weight="${esc(String(st.fontWeight))}" font-style="${esc(st.fontStyle)}"` +
+        (st.letterSpacing ? ` letter-spacing="${st.letterSpacing}"` : "") +
+        (st.textDecoration !== "none" ? ` text-decoration="${esc(st.textDecoration)}"` : "") +
+        ` fill="${esc(st.color)}" fill-opacity="${st.opacity}" xml:space="preserve">${esc(tt)}</text>`;
     }
-    (n.children || []).forEach(walk);
-  };
-  walk(typeof s.content === "string" ? safeJson(s.content) : s.content);
-  let y = b.y;
-  for (const l of lines) {
-    const fs = parseFloat(String(l.leaf.fontSize)) || 14;
-    const lh = (parseFloat(String(l.leaf.lineHeight)) || 1.2) * fs;
-    const fill = (l.leaf.fills || [])[0] || {};
-    out += `<text x="${r2(b.x)}" y="${r2(y + lh / 2 + fs * 0.35)}" font-family="${esc(fontStack(l.leaf.fontFamily))}" font-size="${fs}" font-weight="${esc(String(l.leaf.fontWeight || 400))}" fill="${esc(fill.fillColor || "#000")}" xml:space="preserve">${esc(l.text)}</text>`;
     y += lh;
   }
   return out;
@@ -396,4 +401,30 @@ export async function renderSvg(objects: Record<string, Shape>, rootId: string, 
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${r2(box.x)} ${r2(box.y)} ${r2(box.w)} ${r2(box.h)}" width="${r2(box.w)}" height="${r2(box.h)}">` +
     `<defs>${ctx.defs.join("")}</defs>${body}</svg>`;
   return { svg, width: box.w, height: box.h, warnings: ctx.warnings };
+}
+
+/** Font files the extension ships (media/fonts), by the family names Penpot files use. */
+const EMBEDDED_FONTS = [
+  { families: ["Inter"], file: "inter" },
+  { families: ["sourcesanspro", "Source Sans Pro", "Source Sans 3"], file: "source-sans-3" },
+];
+
+/**
+ * Adds the shipped fonts the SVG uses as data URIs: an SVG drawn as an image cannot reach fonts that
+ * are not installed, so otherwise texts fall back to the system font and come out with other widths.
+ */
+export function embedFonts(svg: string, read: (file: string) => Uint8Array | undefined): string {
+  const italic = /font-style="italic"/.test(svg);
+  let css = "";
+  for (const f of EMBEDDED_FONTS) {
+    const used = f.families.filter((name) => svg.includes(`'${name}'`));
+    if (!used.length) continue;
+    for (const [suffix, style] of italic ? [["", "normal"], ["-italic", "italic"]] : [["", "normal"]]) {
+      const data = read(`${f.file}${suffix}.woff2`);
+      if (!data) continue;
+      const src = `url(data:font/woff2;base64,${Buffer.from(data).toString("base64")}) format('woff2')`;
+      for (const name of used) css += `@font-face{font-family:'${name}';src:${src};font-weight:100 900;font-style:${style}}`;
+    }
+  }
+  return css ? svg.replace(/<svg\b[^>]*>/, (open) => `${open}<style>${css}</style>`) : svg;
 }

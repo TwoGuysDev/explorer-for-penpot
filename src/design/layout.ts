@@ -5,6 +5,7 @@
 // No VS Code imports here, so it can be unit-tested with plain Node.
 import { Shape } from "../api";
 import { Rect, boxOf, isRotated, num, setBox, translateTree } from "./geometry";
+import { refitContent } from "./path";
 
 export interface LayoutHooks {
   /** Called for every shape whose geometry changed. */
@@ -67,6 +68,7 @@ export class FlexEngine {
       this.hooks.warn(`"${s.name}" is rotated: its size was not changed by the layout.`);
       return;
     }
+    if (s.type === "path" && s.content != null) s.content = refitContent(s.content, b, { x: b.x, y: b.y, width, height }) ?? s.content;
     setBox(s, { x: b.x, y: b.y, width, height });
     this.hooks.touched(s.id);
   }

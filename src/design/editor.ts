@@ -7,11 +7,12 @@ import { randomUUID } from "node:crypto";
 import { ROOT_ID, Shape } from "../api";
 import { IDENTITY, Rect, boxOf, corners, isRotated, num, selrect, setBox, subtree, translateTree, unionBox } from "./geometry";
 import { FlexEngine, hasLayout } from "./layout";
+import { Matrix, PathError, Seg, SvgElementPath, fitMatrix, formatSegs, parsePath, parseSvg, refitContent, segsBounds, transformSegs } from "./path";
 import { TextStyle, buildContent, editContent, measureText, styleOf, textOf } from "./text";
 
 export class EditError extends Error {}
 
-export type ShapeKind = "board" | "rect" | "ellipse" | "text";
+export type ShapeKind = "board" | "rect" | "ellipse" | "text" | "path" | "svg";
 
 export interface FillSpec { color?: string; opacity?: number }
 export interface StrokeSpec { color?: string; width?: number; opacity?: number; alignment?: "inner" | "center" | "outer"; style?: "solid" | "dotted" | "dashed" | "mixed" }
@@ -53,6 +54,12 @@ export interface ShapeProps extends TextStyle {
   text?: string;
   growType?: "auto-width" | "auto-height" | "fixed";
   verticalAlign?: "top" | "center" | "bottom";
+  // Paths and SVG icons
+  /** SVG path data, in the coordinates of viewBox (default: the path's own bounds). */
+  d?: string;
+  viewBox?: [number, number, number, number];
+  /** SVG markup (create type "svg"): paths, basic shapes, groups and transforms become Penpot paths. */
+  svg?: string;
   raw?: Record<string, unknown>;
 }
 
@@ -166,16 +173,26 @@ export class PageEditor {
 
   // ---------- operations ----------
 
-  create(kind: ShapeKind, parentId: string | undefined, props: ShapeProps, index?: number): string {
-    const pid = parentId || ROOT_ID;
+  /** Where a new child goes in a parent's list (bottom-up): index counts from the top of the layers panel
+   * (= first in a flex flow). Without one, a child goes last in a layout's flow, or on top elsewhere. */
+  private insertAt(parent: Shape, list: string[], index?: number): number {
+    if (index === undefined) return hasLayout(parent) ? 0 : list.length;
+    return Math.max(0, Math.min(list.length, list.length - index));
+  }
+
+  private container(pid: string): Shape {
     const parent = this.get(pid);
     if (!(parent.type === "frame" || parent.type === "group")) throw new EditError(`"${parent.name}" is a ${parent.type}: shapes can only go inside boards and groups.`);
+    return parent;
+  }
+
+  /** A blank shape of this type registered under the parent (box 0,0 100×100; the caller places it). */
+  private blank(type: string, pid: string, name: string, at: number | "end"): Shape {
+    const parent = this.get(pid);
     const id = randomUUID();
-    const frameId = this.frameFor(pid);
-    const type = kind === "board" ? "frame" : kind === "ellipse" ? "circle" : kind;
     const s: Shape = {
       id,
-      name: props.name || (kind === "board" ? "Board" : kind === "text" ? (props.text || "Text").slice(0, 40) : kind[0].toUpperCase() + kind.slice(1)),
+      name,
       type,
       x: 0, y: 0, width: 100, height: 100,
       rotation: 0,
@@ -184,7 +201,7 @@ export class PageEditor {
       transform: { ...IDENTITY },
       transformInverse: { ...IDENTITY },
       parentId: pid,
-      frameId,
+      frameId: this.frameFor(pid),
       flipX: null,
       flipY: null,
       proportionLock: false,
@@ -193,6 +210,28 @@ export class PageEditor {
       strokes: [],
       fills: [],
     };
+    if (hasLayout(parent)) {
+      s.layoutItemHSizing = type === "text" ? "auto" : "fix";
+      s.layoutItemVSizing = type === "text" ? "auto" : "fix";
+    }
+    this.objects[id] = s;
+    const list = [...(parent.shapes || [])];
+    list.splice(at === "end" ? list.length : at, 0, id);
+    parent.shapes = list;
+    this.addedIds.add(id);
+    this.touch(pid);
+    return s;
+  }
+
+  create(kind: ShapeKind, parentId: string | undefined, props: ShapeProps, index?: number): string {
+    const pid = parentId || ROOT_ID;
+    const parent = this.container(pid);
+    if (kind === "svg") return this.createSvg(pid, props, index);
+    const type = kind === "board" ? "frame" : kind === "ellipse" ? "circle" : kind;
+    const name = props.name || (kind === "board" ? "Board" : kind === "text" ? (props.text || "Text").slice(0, 40) : kind[0].toUpperCase() + kind.slice(1));
+    const segs = type === "path" ? this.segs(props.d) : undefined;
+    const s = this.blank(type, pid, name, this.insertAt(parent, parent.shapes || [], index));
+    const id = s.id;
     if (type === "frame") {
       Object.assign(s, { shapes: [], hideFillOnExport: false, showContent: true, r1: 0, r2: 0, r3: 0, r4: 0 });
       if (pid === ROOT_ID && props.fill === undefined) s.fills = [{ fillColor: "#FFFFFF", fillOpacity: 1 }];
@@ -206,25 +245,106 @@ export class PageEditor {
       s.content = buildContent(props.text ?? "Text", props, props.verticalAlign);
       this.textDirty.add(id);
     }
-    if (hasLayout(parent)) {
-      s.layoutItemHSizing = type === "text" ? "auto" : "fix";
-      s.layoutItemVSizing = type === "text" ? "auto" : "fix";
-    }
-    this.objects[id] = s;
-    const list = [...(parent.shapes || [])];
-    // index counts from the top of the layers panel (= first in a flex flow); the list is bottom-up.
-    const at = index === undefined ? list.length : Math.max(0, Math.min(list.length, list.length - index));
-    list.splice(at, 0, id);
-    parent.shapes = list;
-    this.addedIds.add(id);
-    this.touch(pid);
     const o = this.originOf(s);
-    setBox(s, { x: o.x + (props.x ?? 0), y: o.y + (props.y ?? 0), width: props.width ?? (type === "text" ? 100 : 100), height: props.height ?? (type === "text" ? 20 : 100) });
-    const { x: _x, y: _y, width: _w, height: _h, text: _t, growType: _g, ...rest } = props;
+    if (segs) {
+      if (props.fill === undefined && props.stroke === undefined) s.fills = [{ fillColor: "#000000", fillOpacity: 1 }];
+      const vb = props.viewBox ? this.viewBox(props.viewBox) : segsBounds(segs)!;
+      const w = props.width ?? vb.width, h = props.height ?? vb.height;
+      this.setPath(s, transformSegs(segs, fitMatrix(vb, { x: o.x + (props.x ?? 0), y: o.y + (props.y ?? 0), width: w, height: h })));
+    } else {
+      setBox(s, { x: o.x + (props.x ?? 0), y: o.y + (props.y ?? 0), width: props.width ?? 100, height: props.height ?? (type === "text" ? 20 : 100) });
+    }
+    const { x: _x, y: _y, width: _w, height: _h, text: _t, growType: _g, d: _d, viewBox: _v, ...rest } = props;
     this.apply(s, rest, true);
     this.dirty(id);
     this.updateGroups(pid);
     return id;
+  }
+
+  private segs(d: unknown): Seg[] {
+    if (typeof d !== "string" || !d.trim()) throw new EditError('A path needs "d" (SVG path data).');
+    try {
+      const segs = parsePath(d);
+      if (!segsBounds(segs)) throw new EditError("The path data has no points.");
+      return segs;
+    } catch (err) {
+      if (err instanceof PathError) throw new EditError(err.message);
+      throw err;
+    }
+  }
+
+  private viewBox(v: unknown) {
+    if (!Array.isArray(v) || v.length !== 4 || !v.every((n) => typeof n === "number" && isFinite(n)) || v[2] <= 0 || v[3] <= 0) {
+      throw new EditError("viewBox must be [x, y, width, height] with a positive size.");
+    }
+    return { x: v[0], y: v[1], width: v[2], height: v[3] };
+  }
+
+  /** Absolute segments → content and box of a path shape (Penpot keeps the box at the path's bounds). */
+  private setPath(s: Shape, segs: Seg[]) {
+    const b = segsBounds(segs)!;
+    s.content = formatSegs(segs);
+    setBox(s, { x: b.x, y: b.y, width: Math.max(b.width, 0.01), height: Math.max(b.height, 0.01) });
+  }
+
+  /** An SVG document as paths: one path, or a group of paths in document order. */
+  private createSvg(pid: string, props: ShapeProps, index?: number): string {
+    if (typeof props.svg !== "string" || !props.svg.trim()) throw new EditError('An svg needs "svg" (the SVG markup).');
+    let doc;
+    try {
+      doc = parseSvg(props.svg, props.color ?? "#000000");
+    } catch (err) {
+      if (err instanceof PathError) throw new EditError(err.message);
+      throw err;
+    }
+    for (const w of doc.warnings) this.warnings.push(`SVG: ${w}.`);
+    const parent = this.get(pid);
+    const vb = doc.viewBox;
+    // Like an <img>: keep the proportions (xMidYMid meet) inside the requested box.
+    const w = props.width ?? (props.height !== undefined ? (vb.width * props.height) / vb.height : vb.width);
+    const h = props.height ?? (props.width !== undefined ? (vb.height * props.width) / vb.width : vb.height);
+    const k = Math.min(w / vb.width, h / vb.height);
+    const o = this.originOf({ frameId: this.frameFor(pid) } as Shape);
+    const x0 = o.x + (props.x ?? 0) + (w - vb.width * k) / 2, y0 = o.y + (props.y ?? 0) + (h - vb.height * k) / 2;
+    const m: Matrix = [k, 0, 0, k, x0 - vb.x * k, y0 - vb.y * k];
+    const name = props.name || "Icon";
+    const at = this.insertAt(parent, parent.shapes || [], index);
+    const style = (s: Shape, el: SvgElementPath) => {
+      s.fills = el.fill ? [{ fillColor: el.fill, fillOpacity: el.fillOpacity }] : [];
+      if (el.stroke && el.strokeWidth > 0) {
+        const cap = el.linecap === "round" || el.linecap === "square" ? el.linecap : undefined;
+        s.strokes = [{
+          strokeColor: el.stroke, strokeOpacity: el.strokeOpacity, strokeWidth: Math.round(el.strokeWidth * k * 1000) / 1000,
+          strokeAlignment: "center", strokeStyle: "solid", ...(cap ? { strokeCapStart: cap, strokeCapEnd: cap } : {}),
+        }];
+      }
+      const svgAttrs: Record<string, string> = {};
+      if (el.linejoin) svgAttrs.strokeLinejoin = el.linejoin;
+      if (el.linecap) svgAttrs.strokeLinecap = el.linecap;
+      if (el.fillRule) svgAttrs.fillRule = el.fillRule;
+      if (Object.keys(svgAttrs).length) s.svgAttrs = svgAttrs;
+      if (el.opacity !== 1) s.opacity = el.opacity;
+    };
+    let root: Shape;
+    if (doc.paths.length === 1) {
+      root = this.blank("path", pid, name, at);
+      this.setPath(root, transformSegs(doc.paths[0].segs, m));
+      style(root, doc.paths[0]);
+    } else {
+      root = this.blank("group", pid, name, at);
+      root.shapes = [];
+      for (const el of doc.paths) {
+        const s = this.blank("path", root.id, el.name, "end");
+        this.setPath(s, transformSegs(el.segs, m));
+        style(s, el);
+      }
+      this.updateGroups(root.id);
+    }
+    const { x: _x, y: _y, width: _w, height: _h, svg: _s, color: _c, name: _n, ...rest } = props;
+    this.apply(root, rest, true);
+    this.dirty(root.id);
+    this.updateGroups(pid);
+    return root.id;
   }
 
   update(id: string, props: ShapeProps) {
@@ -388,6 +508,16 @@ export class PageEditor {
       this.textDirty.add(s.id);
     }
 
+    // New path data, fitted to the current box (then x/y/width/height below can move and resize it).
+    if (p.d !== undefined || p.viewBox !== undefined) {
+      if (s.type !== "path") throw new EditError(`"${s.name}" is a ${s.type}, not a path.`);
+      if (p.d === undefined) throw new EditError('viewBox goes with "d".');
+      const segs = this.segs(p.d);
+      const vb = p.viewBox ? this.viewBox(p.viewBox) : segsBounds(segs)!;
+      this.setPath(s, transformSegs(segs, fitMatrix(vb, boxOf(s))));
+      changed.push("content", "selrect", "points");
+    }
+
     // Geometry (relative to the containing board).
     if (p.x !== undefined || p.y !== undefined || p.width !== undefined || p.height !== undefined) {
       if (!fresh) {
@@ -407,9 +537,13 @@ export class PageEditor {
       const resized = Math.abs(target.width - rel.width) > 0.001 || Math.abs(target.height - rel.height) > 0.001;
       if (resized) {
         if (isRotated(s)) throw new EditError(`"${s.name}" is rotated: it cannot be resized here.`);
-        if (["group", "path", "bool", "svg-raw"].includes(s.type)) throw new EditError(`"${s.name}" is a ${s.type}: resize the shapes inside it instead.`);
+        if (["group", "bool", "svg-raw"].includes(s.type)) throw new EditError(`"${s.name}" is a ${s.type}: resize the shapes inside it instead.`);
         if (target.width <= 0 || target.height <= 0) throw new EditError("Width and height must be greater than 0.");
         const b = boxOf(s);
+        if (s.type === "path" && s.content != null) {
+          s.content = refitContent(s.content, b, { x: b.x, y: b.y, width: target.width, height: target.height }) ?? s.content;
+          changed.push("content");
+        }
         setBox(s, { x: b.x, y: b.y, width: target.width, height: target.height });
         changed.push("width", "height", "selrect", "points");
         if (s.type === "text") {
@@ -448,7 +582,7 @@ export class PageEditor {
       if (s.shapeRef && old.id !== pid) throw new EditError(`"${s.name}" is inside a component copy and cannot leave it.`);
     }
     const list = (parent.shapes || []).filter((c: string) => !ids.includes(c));
-    const at = index === undefined ? list.length : Math.max(0, Math.min(list.length, list.length - index));
+    const at = this.insertAt(parent, list, index);
     // ids are given top-first; the list is bottom-up.
     list.splice(at, 0, ...[...ids].reverse());
     for (const id of ids) {
@@ -477,8 +611,11 @@ export class PageEditor {
     this.updateGroups(pid);
   }
 
-  /** Copies a shape (and its children) with new ids; component links are dropped in the copy. */
-  duplicate(id: string, parentId?: string, index?: number, offset?: { x?: number; y?: number }): string {
+  /**
+   * Copies a shape (and its children) with new ids; component links are dropped in the copy.
+   * Returns the copy's id and, for each copied shape (the original included), the id of its copy.
+   */
+  duplicate(id: string, parentId?: string, index?: number, offset?: { x?: number; y?: number }): { id: string; copies: Map<string, string> } {
     if (id === ROOT_ID) throw new EditError("The page root cannot be duplicated.");
     const src = this.get(id);
     const pid = parentId || src.parentId || ROOT_ID;
@@ -514,7 +651,9 @@ export class PageEditor {
     const b = boxOf(copy);
     translateTree(this.objects, newId, o.x + rel.x + (offset?.x ?? 0) - b.x, o.y + rel.y + (offset?.y ?? 0) - b.y);
     const list = [...(parent.shapes || [])];
-    const at = index === undefined ? list.length : Math.max(0, Math.min(list.length, list.length - index));
+    // Without an index the copy goes right after the original: next in a flex flow, just above it elsewhere.
+    const src0 = list.indexOf(id);
+    const at = index === undefined && src0 >= 0 ? (hasLayout(parent) ? src0 : src0 + 1) : this.insertAt(parent, list, index);
     list.splice(at, 0, newId);
     parent.shapes = list;
     if (hasLayout(parent) && !copy.layoutItemHSizing) {
@@ -526,7 +665,7 @@ export class PageEditor {
     this.touch(pid);
     this.dirty(newId);
     this.updateGroups(pid);
-    return newId;
+    return { id: newId, copies: map };
   }
 
   remove(ids: string[]) {

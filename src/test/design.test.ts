@@ -5,7 +5,8 @@ import { PenpotArchive } from "../archive";
 import { PageEditor } from "../design/editor";
 import { boxOf, corners, selrect, translatePath } from "../design/geometry";
 import { LocalSource } from "../design/sources";
-import { textOf } from "../design/text";
+import { textOf, textRows } from "../design/text";
+import { formatSegs, parsePath, parseSvg, segsBounds } from "../design/path";
 import { McpServer } from "../mcp/server";
 import { ToolHost, Tools } from "../mcp/tools";
 import { ZipReader, crc32, writeZip } from "../zip";
@@ -100,7 +101,9 @@ test("editor: delete, move between boards and duplicate", () => {
   assert.equal(ed.objects.back.parentId, other);
   assert.equal(ed.objects.back.frameId, other);
   assert.equal(ed.objects.back.layoutItemHSizing, undefined);
-  const copy = ed.duplicate("footer", undefined, 0, { y: 100 });
+  const { id: copy, copies } = ed.duplicate("footer", undefined, 0, { y: 100 });
+  assert.equal(copies.get("footer"), copy);
+  assert.equal(ed.objects[copies.get("next")!].parentId, copy);
   ed.remove(["skip"]);
   const diff = ed.finish();
   assert.ok(!ed.objects.skip);
@@ -190,4 +193,61 @@ test("mcp: initialize, list tools, edit a .penpot and read it back over HTTP", a
   } finally {
     await server.stop();
   }
+});
+
+test("editor: without index, new shapes go last in a flex flow and on top elsewhere", () => {
+  const ed = new PageEditor(footerPage(), P);
+  const a = ed.create("rect", "footer", { width: 10, height: 10 });
+  // The list is bottom-up: last in the flow = first in the list.
+  assert.equal((ed.objects.footer.shapes as string[])[0], a);
+  const top = ed.create("rect", undefined, { width: 10, height: 10 });
+  assert.equal((ed.objects[ROOT_ID].shapes as string[]).at(-1), top);
+  const { id: dup } = ed.duplicate("back");
+  const list = ed.objects.footer.shapes as string[];
+  assert.equal(list.indexOf(dup), list.indexOf("back") - 1); // right after Back in the flow
+  ed.finish();
+});
+
+test("path: commands become absolute M/L/C/Z, bounds include curve extremes", () => {
+  assert.equal(formatSegs(parsePath("m1 1 h2 v2 h-2 z")), "M1,1L3,1L3,3L1,3Z");
+  const arc = parsePath("M0 10 A10 10 0 0 1 20 10");
+  const b = segsBounds(arc)!;
+  assert.ok(Math.abs(b.y - 0) < 0.05 && Math.abs(b.height - 10) < 0.05, JSON.stringify(b));
+  assert.deepEqual(parsePath("M0 0a5 5 0 105 5").at(-1)!.p.slice(4), [5, 5]); // compact arc flags
+  assert.throws(() => parsePath("X1"), /Invalid path command/);
+});
+
+test("editor: path and svg icons are scaled into their box", () => {
+  const ed = new PageEditor(footerPage(), P);
+  const board = ed.create("board", undefined, { x: 100, y: 100, width: 200, height: 200 });
+  const line = ed.create("path", board, { d: "M4 12h16", viewBox: [0, 0, 24, 24], width: 48, height: 48, stroke: { color: "#111111", width: 2 } });
+  const l = ed.objects[line];
+  assert.equal(l.content, "M108,124L140,124");
+  assert.deepEqual(ed.relBox(l), { x: 8, y: 24, width: 32, height: 0.01 });
+  const svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+  const icon = ed.create("svg", board, { svg, width: 48, color: "#ff0000", x: 50, y: 0 });
+  const g = ed.objects[icon];
+  assert.equal(g.type, "group");
+  const parts = g.shapes as string[];
+  assert.equal(parts.length, 2);
+  const circle = ed.objects[parts[0]];
+  assert.equal(circle.strokes[0].strokeColor, "#ff0000");
+  assert.equal(circle.strokes[0].strokeWidth, 4);
+  assert.equal(circle.strokes[0].strokeCapStart, "round");
+  assert.deepEqual(circle.fills, []);
+  const box = ed.relBox(g);
+  assert.ok(Math.abs(box.x - 54) < 0.01 && Math.abs(box.width - 40) < 0.01, JSON.stringify(box));
+  ed.update(line, { width: 16 });
+  assert.equal(ed.objects[line].content, "M108,124L124,124");
+  ed.finish();
+  assert.throws(() => parseSvg("<div/>"), /No <svg>/);
+});
+
+test("text rows: wrap to the width, one row per paragraph when growing in width", () => {
+  const ed = new PageEditor(footerPage(), P);
+  const t = ed.create("text", undefined, { text: "Tem certeza que deseja banir este usuário da sala?\nOk", width: 120, fontSize: 14 });
+  const rows = textRows(ed.objects[t].content, "auto-height", 120);
+  assert.ok(rows.length > 2, rows.map((r) => r.text).join("|"));
+  assert.equal(rows.at(-1)!.text, "Ok");
+  assert.equal(textRows(ed.objects[t].content, "auto-width", 120).length, 2);
 });

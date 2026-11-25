@@ -163,30 +163,40 @@ function lineWidth(line: string, st: Required<TextStyle>) {
   return line.length * st.fontSize * factor + Math.max(0, line.length - 1) * st.letterSpacing;
 }
 
+/** Splits a paragraph into rows that fit this width (word wrap with the estimated metrics). */
+function wrap(line: string, st: Required<TextStyle>, width: number): string[] {
+  const rows: string[] = [];
+  let cur = "";
+  for (const word of line.split(/(\s+)/)) {
+    const next = cur + word;
+    if (cur.trim() && lineWidth(next.trimEnd(), st) > width) {
+      rows.push(cur.trimEnd());
+      cur = word.trimStart();
+    } else cur = next;
+  }
+  rows.push(cur.trimEnd());
+  return rows;
+}
+
+export interface TextRow { text: string; style: Required<TextStyle> }
+
+/** Rows of a text as the editor estimates them: one per paragraph, wrapped unless it grows in width. */
+export function textRows(content: any, growType: string | undefined, width: number): TextRow[] {
+  const out: TextRow[] = [];
+  for (const p of paragraphs(content)) {
+    const style = styleOf({ type: "root", children: [{ type: "paragraph-set", children: [p] }] });
+    const line = (p.children || []).map((l: any) => (typeof l.text === "string" ? l.text : "")).join("");
+    const rows = growType === "auto-width" ? [line] : wrap(line, style, width);
+    for (const text of rows) out.push({ text, style });
+  }
+  return out;
+}
+
 /** Estimated size of a text for its grow type ("fixed" keeps the box). */
 export function measureText(content: any, growType: string | undefined, box: { width: number; height: number }) {
-  const st = styleOf(content);
-  const lines = textOf(content).split("\n");
-  const lh = st.fontSize * st.lineHeight;
-  if (growType === "auto-width") {
-    const width = Math.ceil(Math.max(1, ...lines.map((l) => lineWidth(l, st))));
-    return { width, height: Math.ceil(lines.length * lh) };
-  }
-  if (growType === "auto-height") {
-    let count = 0;
-    for (const line of lines) {
-      let cur = "";
-      let rows = 1;
-      for (const word of line.split(/(\s+)/)) {
-        const next = cur + word;
-        if (cur && lineWidth(next.trimEnd(), st) > box.width) {
-          rows++;
-          cur = word.trimStart();
-        } else cur = next;
-      }
-      count += rows;
-    }
-    return { width: box.width, height: Math.ceil(count * lh) };
-  }
-  return { width: box.width, height: box.height };
+  if (growType !== "auto-width" && growType !== "auto-height") return { width: box.width, height: box.height };
+  const rows = textRows(content, growType, box.width);
+  const height = Math.ceil(rows.reduce((h, r) => h + r.style.fontSize * r.style.lineHeight, 0));
+  if (growType === "auto-height") return { width: box.width, height };
+  return { width: Math.ceil(Math.max(1, ...rows.map((r) => lineWidth(r.text, r.style)))), height };
 }

@@ -1,10 +1,13 @@
 // Runs the MCP server inside VS Code: settings, commands, status bar item, and the view that turns
 // SVG into PNG for the screenshot tool (and shows the last screenshot to the user).
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { PenpotApi } from "./api";
 import { CloudSource, DesignSource, LocalSource } from "./design/sources";
 import { McpServer } from "./mcp/server";
 import { ToolHost, Tools } from "./mcp/tools";
+import { embedFonts } from "./render";
 
 const EXCLUDE = "**/{node_modules,.git}/**";
 const SERVER_NAME = "penpot-explorer";
@@ -14,6 +17,7 @@ class RasterView {
   private ready: Promise<void> | undefined;
   private seq = 0;
   private readonly waiting = new Map<number, (png: string | undefined) => void>();
+  private readonly fonts = new Map<string, Uint8Array | undefined>();
 
   constructor(private readonly ctx: vscode.ExtensionContext) {}
 
@@ -60,8 +64,20 @@ class RasterView {
         clearTimeout(timer);
         resolve(png);
       });
-      void this.panel!.webview.postMessage({ type: "raster", seq, svg, width, height, caption });
+      void this.panel!.webview.postMessage({ type: "raster", seq, svg: embedFonts(svg, (f) => this.font(f)), width, height, caption });
     });
+  }
+
+  /** A font file shipped in media/fonts (read once). */
+  private font(file: string): Uint8Array | undefined {
+    if (!this.fonts.has(file)) {
+      try {
+        this.fonts.set(file, fs.readFileSync(path.join(this.ctx.extensionPath, "media", "fonts", file)));
+      } catch {
+        this.fonts.set(file, undefined);
+      }
+    }
+    return this.fonts.get(file);
   }
 
   dispose() {
@@ -70,7 +86,7 @@ class RasterView {
 
   private html() {
     const nonce = Array.from({ length: 4 }, () => Math.random().toString(36).slice(2)).join("");
-    const csp = ["default-src 'none'", "img-src data: blob:", "style-src 'unsafe-inline'", `script-src 'nonce-${nonce}'`].join("; ");
+    const csp = ["default-src 'none'", "img-src data: blob:", "font-src data:", "style-src 'unsafe-inline'", `script-src 'nonce-${nonce}'`].join("; ");
     const L = {
       waiting: vscode.l10n.t("Screenshots taken through the MCP server appear here."),
       failed: vscode.l10n.t("Could not draw this image."),

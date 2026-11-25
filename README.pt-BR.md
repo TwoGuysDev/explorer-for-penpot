@@ -39,7 +39,7 @@ A extensão pode rodar um servidor [MCP](https://modelcontextprotocol.io) para q
    Outros clientes MCP usam o mesmo endereço (Streamable HTTP).
 3. Peça as mudanças, por exemplo *"no home.penpot, deixe o título do topo com 40px e coloque um botão Cadastrar embaixo"*.
 
-Ferramentas: `list_designs`, `get_structure`, `get_layers`, `get_shapes`, `edit` (cria, altera, move, duplica e apaga num lote só, salvo de uma vez) e `screenshot` (PNG de um board, mostrado também numa aba **Penpot MCP**).
+Ferramentas: `list_designs`, `get_structure`, `get_layers`, `get_shapes`, `edit` (cria boards, formas, textos e ícones SVG; altera, move, duplica e apaga num lote só, salvo de uma vez) e `screenshot` (PNG de um board, mostrado também numa aba **Penpot MCP**).
 
 - **Layouts flex ficam como no Penpot**: depois de cada edição o servidor posiciona os filhos dos boards com flex (direção, gap, padding, justify, align, wrap, tamanhos fill/auto, margens, mín./máx.). Boards com grid mantêm os filhos onde estão.
 - **O tamanho dos textos é estimado** até o arquivo ser aberto no Penpot, que mede com as fontes de verdade.
