@@ -4,6 +4,7 @@
 import { PenpotApi, ROOT_ID, Shape } from "../api";
 import { PenpotArchive } from "../archive";
 import type { PageDiff } from "./editor";
+import { assetEntries } from "./image";
 
 export interface SourcePage { id: string; name: string }
 export interface SourceFile { id: string; name: string; pages: SourcePage[] }
@@ -77,6 +78,7 @@ export class LocalSource implements DesignSource {
       if (b) boards.add(b);
     }
     for (const e of archive.thumbnailEntries(fileId, boards)) changes.set(e, null);
+    for (const a of diff.media || []) for (const [name, bytes] of assetEntries(fileId, a)) changes.set(name, bytes);
     await this.writeBytes(archive.rewrite(changes));
   }
 }

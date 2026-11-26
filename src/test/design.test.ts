@@ -7,6 +7,8 @@ import { boxOf, corners, selrect, translatePath } from "../design/geometry";
 import { LocalSource } from "../design/sources";
 import { textOf, textRows } from "../design/text";
 import { formatSegs, parsePath, parseSvg, segsBounds } from "../design/path";
+import { blake2b256Hex, imageInfo } from "../design/image";
+import { isJxl, jxlToPng } from "../design/jxl";
 import { McpServer } from "../mcp/server";
 import { ToolHost, Tools } from "../mcp/tools";
 import { ZipReader, crc32, writeZip } from "../zip";
@@ -159,6 +161,10 @@ test("mcp: initialize, list tools, edit a .penpot and read it back over HTTP", a
       if (d !== "local:x.penpot") throw new Error("unknown");
       return new LocalSource(d, async () => bytes, async (b) => { bytes = b; });
     },
+    readImage: async (_d, ref) => {
+      if (ref !== "img/logo.png") throw new Error("file not found");
+      return { bytes: png(40, 20), name: "logo.png" };
+    },
     rasterize: async () => undefined,
     edited: () => undefined,
   };
@@ -189,6 +195,29 @@ test("mcp: initialize, list tools, edit a .penpot and read it back over HTTP", a
     const bad = await call("edit", { design: "local:x.penpot", operations: [{ op: "update", id: "nope", props: {} }] }, 5);
     assert.equal(bad.body.result.isError, true);
     assert.match(bad.body.result.content[0].text, /Nothing was saved/);
+    const img = await call("edit", {
+      design: "local:x.penpot",
+      operations: [
+        { op: "create", type: "image", ref: "logo", props: { image: "img/logo.png", width: 20, x: 5, y: 5 } },
+        { op: "create", type: "ellipse", ref: "avatar", props: { image: `data:image/png;base64,${Buffer.from(png(8, 8)).toString("base64")}`, imageFit: "stretch", width: 32, height: 32 } },
+      ],
+    }, 7);
+    assert.equal(img.body.result.isError, undefined, JSON.stringify(img.body));
+    const a = PenpotArchive.open(bytes);
+    const objs = Object.values(a.pageObjects(F, P));
+    const logo = objs.find((o) => o.name === "logo")!;
+    assert.deepEqual([logo.type, logo.width, logo.height, logo.proportionLock], ["rect", 20, 10, true]);
+    const fill = logo.fills[0].fillImage;
+    assert.deepEqual([fill.width, fill.height, fill.mtype, fill.keepAspectRatio], [40, 20, "image/png", true]);
+    assert.match(a.imageDataUri(F, fill.id)!, /^data:image\/png;base64,/);
+    const avatar = objs.find((o) => o.type === "circle" && o.fills[0]?.fillImage)!;
+    assert.equal(avatar.fills[0].fillImage.keepAspectRatio, false);
+    const zip = new ZipReader(bytes);
+    const media = zip.readJson<any>(`files/${F}/media/${fill.id}.json`);
+    const obj = zip.readJson<any>(`objects/${media.mediaId}.json`);
+    assert.equal(obj.hash, `blake2b:${blake2b256Hex(zip.read(`objects/${media.mediaId}.png`))}`);
+    const missing = await call("edit", { design: "local:x.penpot", operations: [{ op: "create", type: "image", props: { image: "nope.png" } }] }, 8);
+    assert.match(missing.body.result.content[0].text, /Image nope.png: file not found/);
     assert.equal((await rpc({ jsonrpc: "2.0", id: 6, method: "ping" }, { Origin: "https://evil.example" })).status, 403);
   } finally {
     await server.stop();
@@ -250,4 +279,36 @@ test("text rows: wrap to the width, one row per paragraph when growing in width"
   assert.ok(rows.length > 2, rows.map((r) => r.text).join("|"));
   assert.equal(rows.at(-1)!.text, "Ok");
   assert.equal(textRows(ed.objects[t].content, "auto-width", 120).length, 2);
+});
+
+/** A PNG header with this size (enough for imageInfo; not a decodable image). */
+function png(w: number, h: number): Uint8Array {
+  const b = new Uint8Array(33);
+  b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+  new DataView(b.buffer).setUint32(16, w);
+  new DataView(b.buffer).setUint32(20, h);
+  return b;
+}
+
+test("image: sizes from headers, blake2b-256 like Penpot", () => {
+  assert.deepEqual(imageInfo(png(640, 480)), { mtype: "image/png", ext: "png", width: 640, height: 480 });
+  assert.deepEqual(imageInfo(new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 3, 0, 2, 0])), { mtype: "image/gif", ext: "gif", width: 3, height: 2 });
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0, 0xff, 0xc0, 0, 11, 8, 0, 56, 0, 100, 3, 0, 0, 0]);
+  assert.deepEqual(imageInfo(jpeg), { mtype: "image/jpeg", ext: "jpg", width: 100, height: 56 });
+  assert.throws(() => imageInfo(new TextEncoder().encode('<svg viewBox="0 0 1 1"/>')), /type "svg"/);
+  assert.equal(blake2b256Hex(new TextEncoder().encode("abc")), "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319");
+  const long = new Uint8Array(300).map((_, i) => i & 0xff);
+  assert.equal(blake2b256Hex(long).length, 64);
+});
+
+test("jxl: decoded with libjxl and stored as a PNG", async () => {
+  // 64×32 lossless JXL: a red ramp over blue, the bottom half 100/255 opaque.
+  // A small Buffer lives in Node's shared pool (like fs.readFileSync output): the decoder must get only its bytes.
+  const jxl = Buffer.from("/wrHwUoICBAAoAFLKKK6Rfr5YrC+UVBQGFwVBr+fKSgoOAKNEChEFED8/68AQZzFxhgZg4ORWBCDUzEGr4oxKqrYCAAQEAQBICSAQARYCIAFSEUKAD74KRYIpA0YADAkMNKufE78S/WQzlwCOGXn6DFxAA==", "base64");
+  assert.ok(jxl.buffer.byteLength > jxl.length);
+  assert.ok(isJxl(jxl));
+  assert.ok(!isJxl(png(1, 1)));
+  const out = await jxlToPng(jxl);
+  assert.deepEqual(imageInfo(out), { mtype: "image/png", ext: "png", width: 64, height: 32 });
+  assert.equal(out[25], 6); // RGBA: the alpha survived
 });

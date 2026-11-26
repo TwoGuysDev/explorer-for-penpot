@@ -2,6 +2,20 @@
 
 All notable changes to Explorer for Penpot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- MCP `edit`: images. `create` with type `image` adds a rectangle filled with a PNG, JPEG, GIF, WebP or JPEG XL image at its own size (or scaled to the width or height given), and `props.image` fills any board, rectangle, ellipse or path with one (`imageFit`: `cover` or `stretch`). The image can be a file path (absolute, or relative to the .penpot file or the workspace), an http(s) URL or a data URI, and is stored in the .penpot like Penpot does. JPEG XL images are decoded with libjxl (WebAssembly) and stored as PNG, since Penpot and Chromium do not read JXL.
+
+### Fixed
+
+- MCP `edit`: the `color` of an SVG icon also paints shapes with no fill set, and duplicates made with `ref` keep the `# Changelog
+
+All notable changes to Explorer for Penpot are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
+
+ in their label.
+
 ## [0.6.0] - 2026-11-25
 
 ### Added

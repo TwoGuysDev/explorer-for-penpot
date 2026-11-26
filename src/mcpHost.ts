@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { PenpotApi } from "./api";
+import { MAX_IMAGE_BYTES } from "./design/image";
 import { CloudSource, DesignSource, LocalSource } from "./design/sources";
 import { McpServer } from "./mcp/server";
 import { ToolHost, Tools } from "./mcp/tools";
@@ -238,6 +239,33 @@ export class McpHost implements vscode.Disposable {
     return out.map((f) => ({ id: f.id, path: f.uri.fsPath }));
   }
 
+  /** An image for the edit tool: an http(s) URL, a file URL or a path (absolute, or relative to the design or the workspace). */
+  private async readImage(design: string, ref: string): Promise<{ bytes: Uint8Array; name: string }> {
+    const baseName = (p: string) => decodeURIComponent(p.split(/[\\/]/).pop() || "") || "image";
+    if (/^https?:\/\//i.test(ref)) {
+      const res = await fetch(ref, { signal: AbortSignal.timeout(30000), redirect: "follow" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (Number(res.headers.get("content-length")) > MAX_IMAGE_BYTES) throw new Error("the image is larger than 15 MB");
+      return { bytes: new Uint8Array(await res.arrayBuffer()), name: baseName(new URL(res.url || ref).pathname) };
+    }
+    const tries: vscode.Uri[] = [];
+    if (/^file:\/\//i.test(ref)) tries.push(vscode.Uri.parse(ref));
+    else if (path.isAbsolute(ref)) tries.push(vscode.Uri.file(ref));
+    else {
+      if (!this.local.has(design) && design.startsWith("local:")) await this.listLocal();
+      const own = this.local.get(design);
+      if (own) tries.push(vscode.Uri.joinPath(own, "..", ref));
+      for (const f of vscode.workspace.workspaceFolders || []) tries.push(vscode.Uri.joinPath(f.uri, ref));
+    }
+    for (const uri of tries) {
+      let stat: vscode.FileStat;
+      try { stat = await vscode.workspace.fs.stat(uri); } catch { continue; }
+      if (stat.size > MAX_IMAGE_BYTES) throw new Error("the image is larger than 15 MB");
+      return { bytes: await vscode.workspace.fs.readFile(uri), name: baseName(uri.path) };
+    }
+    throw new Error(`file not found (looked in ${tries.map((u) => u.fsPath).join(", ") || "nowhere"})`);
+  }
+
   private toolHost(): ToolHost {
     return {
       listLocal: () => this.listLocal(),
@@ -274,6 +302,7 @@ export class McpHost implements vscode.Disposable {
           },
         );
       },
+      readImage: (design, ref) => this.readImage(design, ref),
       rasterize: (svg, w, h, caption) => this.raster.rasterize(svg, w, h, caption),
       edited: () => undefined,
     };

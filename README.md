@@ -41,7 +41,7 @@ The extension can run an [MCP](https://modelcontextprotocol.io) server so an AI 
    Other MCP clients connect to the same address (Streamable HTTP).
 3. Ask for changes, for example *"in home.penpot, make the hero title 40px and add a Sign up button under it"*.
 
-Tools: `list_designs`, `get_structure`, `get_layers`, `get_shapes`, `edit` (create boards, shapes, texts and SVG icons; update, move, duplicate and delete in one batch, saved once) and `screenshot` (a PNG of a board, also shown in a **Penpot MCP** tab).
+Tools: `list_designs`, `get_structure`, `get_layers`, `get_shapes`, `edit` (create boards, shapes, texts, SVG icons and images (PNG, JPEG, GIF, WebP, JPEG XL) from files, URLs or data URIs; update, move, duplicate and delete in one batch, saved once) and `screenshot` (a PNG of a board, also shown in a **Penpot MCP** tab).
 
 - **Flex layouts are laid out like in Penpot**: after each edit the server places the children of flex boards (direction, gap, padding, justify, align, wrap, fill/auto sizes, margins, min/max). Grid boards keep their children where they are.
 - **Text sizes are estimated** until the file is opened in Penpot, which measures them with the real fonts.

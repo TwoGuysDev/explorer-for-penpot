@@ -1,5 +1,6 @@
 **
 !dist/extension.js
+!dist/jxl_dec.wasm
 !media/icon.png
 !media/penpot.svg
 !media/fonts/**

@@ -4,6 +4,8 @@
 import { ROOT_ID, Shape } from "../api";
 import { EditError, PageEditor, ShapeKind, ShapeProps } from "../design/editor";
 import { boxOf } from "../design/geometry";
+import { ImageAsset, MAX_CONVERTED_BYTES, dataUriBytes, makeAsset } from "../design/image";
+import { isJxl, jxlToPng } from "../design/jxl";
 import { DesignSource, SourceFile, topBoard } from "../design/sources";
 import { renderSvg } from "../render";
 
@@ -13,6 +15,8 @@ export interface ToolHost {
   /** Files of the connected Penpot account (undefined when not connected). */
   listCloud(): Promise<{ id: string; name: string; project: string; team: string }[] | undefined>;
   source(design: string): Promise<DesignSource>;
+  /** Bytes of an image given by file path (absolute, or relative to the design's folder or the workspace) or http(s)/file URL. */
+  readImage(design: string, ref: string): Promise<{ bytes: Uint8Array; name: string }>;
   /** SVG → base64 PNG (undefined when it cannot rasterize); the host may also show it to the user. */
   rasterize(svg: string, width: number, height: number, caption: string): Promise<string | undefined>;
   /** Called after a design was saved. */
@@ -79,6 +83,8 @@ const PROPS_SCHEMA = {
     verticalAlign: { enum: ["top", "center", "bottom"] },
     d: { type: "string", description: 'Paths: SVG path data (any commands, e.g. "M4 12h16"), in viewBox coordinates. Scaled to width/height.' },
     viewBox: { type: "array", items: { type: "number" }, minItems: 4, maxItems: 4, description: "Paths: [x, y, width, height] that d is drawn in (default: the path's own bounds), e.g. [0, 0, 24, 24] for a 24 px icon." },
+    image: { type: ["string", "null"], description: 'An image as the fill (PNG, JPEG, GIF, WebP, or JPEG XL, which is converted to PNG): a file path (absolute, or relative to the .penpot file or the workspace), an http(s) URL or a data: URI. The image is stored in the .penpot. null removes image fills.' },
+    imageFit: { enum: ["cover", "stretch"], description: 'Image fills: "cover" keeps the proportions and crops (default), "stretch" fills the box.' },
     svg: { type: "string", description: "Type svg: SVG markup (paths, rect, circle, ellipse, line, polyline, polygon, groups, transforms). Becomes a path, or a group of paths, scaled to width/height keeping its proportions." },
     raw: { type: "object", description: "Escape hatch: Penpot attributes in camelCase, set as is." },
   },
@@ -132,7 +138,7 @@ export const TOOLS: ToolDef[] = [
     name: "edit",
     title: "Edit a page",
     description:
-      'Applies a list of operations to one page and saves once. Flex boards are laid out again afterwards (children positions, fill and auto sizes), as Penpot does. Operations: {op:"create", type:"board"|"rect"|"ellipse"|"text"|"path"|"svg", parent?, index?, ref?, props}, {op:"update", id, props}, {op:"delete", ids}, {op:"move", ids, parent?, index?}, {op:"duplicate", id, parent?, index?, ref?, offset?:{x,y}}. parent defaults to the page; index counts from the top of the layers panel (0 = top / first in a flex flow). Without index, a new or moved shape goes last in a flex flow (on top elsewhere) and a duplicate goes right after its original. A create or duplicate with ref:"card" can be used later in the same call as "$card", and its layers as "$card/Title" or "$card/Header/Avatar" (child names). Icons: type "svg" with props.svg, or type "path" with props.d and viewBox. A duplicate reports the new id of every copied layer. Text sizes are estimated until the file is opened in Penpot. Component copies keep their link (changes become overrides); component mains cannot be deleted here.',
+      'Applies a list of operations to one page and saves once. Flex boards are laid out again afterwards (children positions, fill and auto sizes), as Penpot does. Operations: {op:"create", type:"board"|"rect"|"ellipse"|"text"|"path"|"svg"|"image", parent?, index?, ref?, props}, {op:"update", id, props}, {op:"delete", ids}, {op:"move", ids, parent?, index?}, {op:"duplicate", id, parent?, index?, ref?, offset?:{x,y}}. parent defaults to the page; index counts from the top of the layers panel (0 = top / first in a flex flow). Without index, a new or moved shape goes last in a flex flow (on top elsewhere) and a duplicate goes right after its original. A create or duplicate with ref:"card" can be used later in the same call as "$card", and its layers as "$card/Title" or "$card/Header/Avatar" (child names). Icons: type "svg" with props.svg, or type "path" with props.d and viewBox. Images: type "image" with props.image (a rectangle at the image size, or scaled to the width or height given), or props.image on any board, rectangle, ellipse or path to fill it (e.g. an avatar: ellipse + image). A duplicate reports the new id of every copied layer. Text sizes are estimated until the file is opened in Penpot. Component copies keep their link (changes become overrides); component mains cannot be deleted here.',
     inputSchema: {
       type: "object",
       properties: {
@@ -143,7 +149,7 @@ export const TOOLS: ToolDef[] = [
             type: "object",
             properties: {
               op: { enum: ["create", "update", "delete", "move", "duplicate"] },
-              type: { enum: ["board", "rect", "ellipse", "text", "path", "svg"] },
+              type: { enum: ["board", "rect", "ellipse", "text", "path", "svg", "image"] },
               id: { type: "string" },
               ids: { type: "array", items: { type: "string" } },
               parent: { type: "string" },
@@ -378,6 +384,7 @@ export class Tools {
     const ops: any[] = Array.isArray(args.operations) ? args.operations : [];
     if (!ops.length) throw new EditError("No operations.");
     const ed = new PageEditor(objects, page.id);
+    await this.loadImages(args.design, ops, ed.images);
     const refs = new Map<string, string>();
     const id = (v: unknown, what: string): string => {
       if (typeof v !== "string" || !v) throw new EditError(`Missing ${what}.`);
@@ -404,7 +411,7 @@ export class Tools {
         switch (op?.op) {
           case "create": {
             const kind = op.type as ShapeKind;
-            if (!["board", "rect", "ellipse", "text", "path", "svg"].includes(kind)) throw new EditError(`type must be board, rect, ellipse, text, path or svg.`);
+            if (!["board", "rect", "ellipse", "text", "path", "svg", "image"].includes(kind)) throw new EditError(`type must be board, rect, ellipse, text, path, svg or image.`);
             const nid = ed.create(kind, parent(op.parent), (op.props || {}) as ShapeProps, op.index);
             if (op.ref) refs.set(String(op.ref), nid);
             created.push(op.ref ? `$${op.ref}=${nid}` : nid);
@@ -456,6 +463,26 @@ export class Tools {
     }
     if (ed.warnings.length) lines.push("Notes:", ...ed.warnings.map((w) => `- ${w}`));
     return ok(lines.join("\n"));
+  }
+
+  /** Reads every image the operations use (props.image), once each. */
+  private async loadImages(design: string, ops: any[], into: Map<string, ImageAsset>) {
+    const refs = new Set<string>();
+    for (const op of ops) if (typeof op?.props?.image === "string" && op.props.image) refs.add(op.props.image);
+    if (refs.size > 20) throw new EditError("At most 20 different images per edit.");
+    await Promise.all([...refs].map(async (ref) => {
+      const short = ref.startsWith("data:") ? "data URI" : ref;
+      try {
+        const got = ref.startsWith("data:") ? { bytes: dataUriBytes(ref), name: "image" } : await this.host.readImage(design, ref);
+        const name = got.name || "image";
+        if (isJxl(got.bytes)) {
+          // Penpot and the screenshot renderer cannot read JPEG XL: store it as a PNG.
+          into.set(ref, makeAsset(await jxlToPng(got.bytes), name.replace(/\.jxl$/i, "") + ".png", MAX_CONVERTED_BYTES));
+        } else into.set(ref, makeAsset(got.bytes, name));
+      } catch (err) {
+        throw new EditError(`Image ${short}: ${err instanceof Error ? err.message : err}. Nothing was saved.`);
+      }
+    }));
   }
 
   private async screenshot(args: any): Promise<ToolResult> {

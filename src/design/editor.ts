@@ -9,10 +9,11 @@ import { IDENTITY, Rect, boxOf, corners, isRotated, num, selrect, setBox, subtre
 import { FlexEngine, hasLayout } from "./layout";
 import { Matrix, PathError, Seg, SvgElementPath, fitMatrix, formatSegs, parsePath, parseSvg, refitContent, segsBounds, transformSegs } from "./path";
 import { TextStyle, buildContent, editContent, measureText, styleOf, textOf } from "./text";
+import type { ImageAsset } from "./image";
 
 export class EditError extends Error {}
 
-export type ShapeKind = "board" | "rect" | "ellipse" | "text" | "path" | "svg";
+export type ShapeKind = "board" | "rect" | "ellipse" | "text" | "path" | "svg" | "image";
 
 export interface FillSpec { color?: string; opacity?: number }
 export interface StrokeSpec { color?: string; width?: number; opacity?: number; alignment?: "inner" | "center" | "outer"; style?: "solid" | "dotted" | "dashed" | "mixed" }
@@ -60,6 +61,10 @@ export interface ShapeProps extends TextStyle {
   viewBox?: [number, number, number, number];
   /** SVG markup (create type "svg"): paths, basic shapes, groups and transforms become Penpot paths. */
   svg?: string;
+  /** An image (a key of the editor's images: file path, URL or data URI) as the shape's fill. */
+  image?: string;
+  /** How the image fills the shape: "cover" keeps its proportions (cropped), "stretch" fits the box. */
+  imageFit?: "cover" | "stretch";
   raw?: Record<string, unknown>;
 }
 
@@ -71,6 +76,8 @@ export interface PageDiff {
   changed: { before: Shape; after: Shape }[];
   /** Ids of removed shapes (descendants included). */
   removed: string[];
+  /** Imported images that the page now uses (to be stored in the file). */
+  media: ImageAsset[];
 }
 
 const isColor = (v: unknown): v is string => typeof v === "string" && /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v);
@@ -102,6 +109,9 @@ export class PageEditor {
   private readonly removedIds = new Set<string>();
   private readonly layoutDirty = new Set<string>();
   private readonly textDirty = new Set<string>();
+
+  /** Images that operations can use (props.image), by the reference they were given with. */
+  readonly images = new Map<string, ImageAsset>();
 
   constructor(private readonly original: Record<string, Shape>, readonly pageId: string) {
     this.objects = structuredClone(original);
@@ -227,6 +237,16 @@ export class PageEditor {
     const pid = parentId || ROOT_ID;
     const parent = this.container(pid);
     if (kind === "svg") return this.createSvg(pid, props, index);
+    if (kind === "image") {
+      // Like an image imported in Penpot: a rectangle filled with it, at its own size unless told otherwise.
+      const img = this.image(props.image);
+      const w = props.width ?? (props.height !== undefined ? (img.width * props.height) / img.height : img.width);
+      const h = props.height ?? (props.width !== undefined ? (img.height * props.width) / img.width : img.height);
+      const name = props.name || img.name.replace(/\.[a-z0-9]+$/i, "") || "Image";
+      const id = this.create("rect", parentId, { ...props, name, width: w, height: h, fill: null }, index);
+      Object.assign(this.objects[id], { proportionLock: props.width === undefined || props.height === undefined, proportion: w / h });
+      return id;
+    }
     const type = kind === "board" ? "frame" : kind === "ellipse" ? "circle" : kind;
     const name = props.name || (kind === "board" ? "Board" : kind === "text" ? (props.text || "Text").slice(0, 40) : kind[0].toUpperCase() + kind.slice(1));
     const segs = type === "path" ? this.segs(props.d) : undefined;
@@ -259,6 +279,13 @@ export class PageEditor {
     this.dirty(id);
     this.updateGroups(pid);
     return id;
+  }
+
+  private image(ref: unknown): ImageAsset {
+    if (typeof ref !== "string" || !ref) throw new EditError('An image needs "image" (a file path, URL or data URI).');
+    const img = this.images.get(ref);
+    if (!img) throw new EditError(`The image "${ref.slice(0, 80)}" was not loaded.`);
+    return img;
   }
 
   private segs(d: unknown): Seg[] {
@@ -381,6 +408,24 @@ export class PageEditor {
           changed.push("content");
         }
       } else set("fills", list.map((f) => ({ fillColor: f.color, fillOpacity: f.opacity ?? 1 })));
+    }
+    if (p.image !== undefined || p.imageFit !== undefined) {
+      if (s.type === "text" || s.type === "group") throw new EditError(`"${s.name}" is a ${s.type}: only boards, rectangles, ellipses and paths take an image.`);
+      if (p.imageFit !== undefined && !["cover", "stretch"].includes(p.imageFit)) throw new EditError('imageFit must be "cover" or "stretch".');
+      const keep = p.imageFit === undefined ? undefined : p.imageFit === "cover";
+      if (p.image !== undefined && p.image !== null) {
+        const img = this.image(p.image);
+        set("fills", [{
+          fillOpacity: 1,
+          fillImage: { id: img.id, name: img.name, width: img.width, height: img.height, mtype: img.mtype, keepAspectRatio: keep ?? true },
+        }]);
+      } else if (p.image === null) {
+        set("fills", (Array.isArray(s.fills) ? s.fills : []).filter((f: any) => !f.fillImage));
+      } else {
+        const fills: any[] = Array.isArray(s.fills) ? s.fills : [];
+        if (!fills.some((f) => f.fillImage)) throw new EditError(`"${s.name}" has no image fill: set "image" too.`);
+        set("fills", fills.map((f) => (f.fillImage ? { ...f, fillImage: { ...f.fillImage, keepAspectRatio: keep } } : f)));
+      }
     }
     if (p.stroke !== undefined) {
       if (p.stroke && p.stroke.color !== undefined && !isColor(p.stroke.color)) throw new EditError(`Invalid stroke color "${p.stroke.color}".`);
@@ -761,7 +806,12 @@ export class PageEditor {
       }
       if (JSON.stringify(this.original[id]) !== JSON.stringify(after)) changed.push({ before: this.original[id], after });
     }
-    return { pageId: this.pageId, added: added.map((id) => this.objects[id]), changed, removed: [...this.removedIds] };
+    const used = new Set<string>();
+    for (const s of [...added.map((id) => this.objects[id]), ...changed.map((c) => c.after)]) {
+      for (const f of Array.isArray(s.fills) ? s.fills : []) if (f?.fillImage?.id) used.add(f.fillImage.id);
+    }
+    const media = [...new Set(this.images.values())].filter((a) => used.has(a.id));
+    return { pageId: this.pageId, added: added.map((id) => this.objects[id]), changed, removed: [...this.removedIds], media };
   }
 
   /** Parents before children. */
